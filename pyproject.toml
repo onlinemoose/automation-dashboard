@@ -1,0 +1,23 @@
+[project]
+name = "capability-module"
+version = "0.1.0"
+description = "One discrete capability with a clear contract."
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "import-linter>=2",
+]
+
+[tool.uv]
+# This is a script/module project, not an installable package.
+package = false
+
+[tool.pytest.ini_options]
+# Put the repo root on the import path so tests can `import capability`
+# without the project being installed as a package.
+pythonpath = ["."]

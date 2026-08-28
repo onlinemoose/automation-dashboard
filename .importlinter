@@ -1,0 +1,14 @@
+[importlinter]
+root_package = capability
+include_external_packages = True
+
+[importlinter:contract:no-orchestration-framework]
+name = A capability module must not import an orchestration framework
+type = forbidden
+source_modules =
+    capability
+forbidden_modules =
+    prefect
+    dagster
+    airflow
+    celery

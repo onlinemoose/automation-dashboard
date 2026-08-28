@@ -1,0 +1,3 @@
+Replace this with a real input, so `cli.py` exercises the module end to
+end. For a cover-letter writer this would be a job posting; for a
+summariser, an article; for a fit assessment, a role plus a CV.
