@@ -1,9 +1,7 @@
+.venv/
 __pycache__/
 *.pyc
-.venv/
-.env
 .pytest_cache/
 .import_linter_cache/
+.env
 dist/
-uv.lock
-.DS_Store

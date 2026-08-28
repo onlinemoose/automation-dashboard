@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} — Automation Dashboard{% endblock %}
+{% block main %}
+<section class="panel">
+  <p class="crumb"><a href="/">&larr; All capabilities</a></p>
+  <h1>{{ page.title }}</h1>
+  <p class="lede">{{ page.summary }}</p>
+
+  {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
+  <p class="hint"><a href="/p/{{ page.slug }}?example=1">Load example inputs</a></p>
+
+  <form method="post" action="/p/{{ page.slug }}">
+    {% for f in page.fields %}
+    <div class="field{% if f.name in errors %} field--error{% endif %}">
+      <label for="{{ f.name }}">
+        {{ f.label }}{% if f.required %} <span class="req" title="required">*</span>{% endif %}
+      </label>
+      {% if f.help %}<p class="help">{{ f.help }}</p>{% endif %}
+      {% if f.widget == "text" %}
+        <input type="text" id="{{ f.name }}" name="{{ f.name }}"
+               value="{{ values.get(f.name, "") }}" placeholder="{{ f.placeholder }}"
+               {% if f.required %}required{% endif %}>
+      {% elif f.widget == "number" %}
+        <input type="number" id="{{ f.name }}" name="{{ f.name }}"
+               value="{{ values.get(f.name, "") }}" {% if f.required %}required{% endif %}>
+      {% else %}
+        <textarea id="{{ f.name }}" name="{{ f.name }}"
+                  rows="{{ 10 if f.widget in ("textarea", "lines") else 3 }}"
+                  placeholder="{{ f.placeholder }}"
+                  {% if f.required %}required{% endif %}>{{ values.get(f.name, "") }}</textarea>
+      {% endif %}
+      {% if f.name in errors %}<p class="error">{{ errors[f.name] }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    <button type="submit">Run</button>
+    <p class="hint">Capabilities that call an LLM can take up to a minute.</p>
+  </form>
+</section>
+{% endblock %}

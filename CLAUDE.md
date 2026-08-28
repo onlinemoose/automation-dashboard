@@ -1,133 +1,133 @@
-# CLAUDE.md — Capability Module
+# CLAUDE.md — Experience Layer (the dashboard)
 
-This repo is **one capability module**: a single, discrete piece of
-functionality with clear inputs and a clear output (e.g. "write a cover
-letter", "assess fit for a role", "summarise a job posting"). It is
-built to work in isolation first, and be composed into larger workflows
-later — without the module itself changing.
+This repo is **the automation system's dashboard** — the experience
+layer. One small web app that puts a usable face on the capability
+modules. One page per capability — the page's form fields *are* that
+capability's inputs, its results view *is* that capability's output. The
+app collects the form, calls the capability's `run()`, and renders what
+comes back. It holds no domain logic of its own.
 
-> **Part of a larger system.** Read the architecture overview first —
-> `automation-architecture/ARCHITECTURE.md` (sibling repo; a link once
-> published) — for how capabilities, orchestration, and the dashboard
-> fit together, and which rules are system-wide vs. specific to this
-> repo.
+It was made from `experience-layer-template`; that repo holds the pattern
+and the rules below, which travel with this `CLAUDE.md`.
 
-> **New copy of the template?** Do these, then delete this note:
-> 1. Write `docs/CONTRACT.md` before touching `_core.py`.
-> 2. Fill in the real inputs/outputs in `capability/_contract.py`.
-> 3. Implement `capability/_core.py`.
->
-> Leave the `capability/` folder name exactly as it is — nothing to
-> rename, no import lines to change. Each module is its own project, so
-> the name never clashes.
+> **Part of a larger system.** Read `automation-architecture/ARCHITECTURE.md`
+> (sibling repo) first — it defines the three layers (capabilities →
+> orchestration → experience) and which rules are system-wide. This repo
+> is the *experience* layer described there.
 
 ## Mental model
 
-A capability module is a contractor hired for one task. It has a
-job-order form — *given these inputs, return this output* — and it never
-wanders into other contractors' workshops or reads their files.
+The dashboard is **the reception desk**. It hands each visitor the
+job-order form the right contractor (capability) needs, passes the
+filled form through, and shows what comes back. It knows *which*
+contractors exist and *what each one's form looks like* — nothing about
+how the work is done. The moment real logic starts living here, a
+capability is missing.
 
 ## The layers — and where this repo sits
 
-- **Capability module** ← *this repo*. One job. Plain Python.
-- **Orchestration** — a separate layer, elsewhere, that calls modules in
-  sequence and passes their outputs along. Prefect, or an AI that
-  decides which module to call, lives there. **Never in this repo.**
-- **Experience** — UI, CLI, chat. Talks to orchestration, never reaches
-  into a module.
+- **Capability modules** — one job each, plain-Python libraries with a
+  `run(Input) -> Output` front door. Consumed here as pinned git
+  dependencies.
+- **Orchestration** — a separate Prefect project that chains capabilities
+  into pipelines. This app may *trigger* one via the Prefect API; it
+  never defines flows or tasks.
+- **Experience** ← *this repo*. The web app. Depends on capabilities.
+  Nothing depends on it.
 
 ## Rules — do not break these
 
-1. **One front door.** `capability.run(...)` is the only public entry
-   point. Everything else in the package is internal — prefix names with
-   `_`, or keep them out of `__init__.py`.
-2. **Receives, returns — never fetches.** Every input arrives as an
-   argument to `run(...)`. The result is returned. The module never
-   reaches out to get data itself: no reading another system's database,
-   no calling another module, no network calls except to the LLM it uses
-   internally.
-3. **No shared storage.** If the module persists anything, that storage
-   is private to it and described in `docs/CONTRACT.md`. No other module
-   reads or writes it.
-4. **Describable in isolation.** State the inputs and output without
-   naming another module. "Takes a job posting and a CV, returns a cover
-   letter" ✅. "Takes the Insights module's output" ❌.
-5. **Contract before code.** `docs/CONTRACT.md` is written and agreed
-   before the implementation changes. If it can't be written without
-   referencing another module, the boundary is wrong — stop and redraw.
-6. **One reason to change.** A requirement change lands in this repo
-   only. If a change here forces a change elsewhere, the contract was
-   wrong.
-7. **Optional inputs, not dependencies.** Richer context (a prior draft,
-   a pre-computed analysis) may be an *optional* argument with a
-   default. The module must still produce a valid result without it.
-8. **No orchestration framework.** Do not add `prefect` (or `dagster`,
-   `airflow`, `celery`) as a dependency. `uv run lint-imports` enforces
-   this.
+1. **Thin.** Collect inputs → call one capability's `run()` (or trigger a
+   pipeline) → render the result. No domain logic. Anything that encodes
+   *how the work is done* belongs in a capability.
+2. **Front door only.** Import a capability's public names
+   (`run`, `Input`, `Output`, and any exported shapes) — never
+   `<capability>._core`, `._contract`, or a `_private` name.
+   `tests/test_guardrails.py` enforces this.
+3. **Dependencies point downward and are pinned.** Each capability is a
+   pinned git dependency (`<name> @ git+https://…@vX.Y.Z`) recorded in
+   `uv.lock`. No capability depends on this app. Local dev may override a
+   pin to a path with `[tool.uv.sources]`.
+4. **A page mirrors a contract.** One `Page` per capability. Its `fields`
+   are that capability's `Input`; its `sections()` render its `Output`.
+   When a contract changes, its page here is the single place that
+   changes. A page never invents inputs the contract doesn't have.
+5. **Compose only at allowed seams.** To chain capabilities (e.g. text
+   extraction → cover letter): call each `run()` in sequence in a page
+   handler, or trigger a Prefect flow. Never make one capability call
+   another.
+6. **Storage is the app's own and declared.** Saved drafts, run history,
+   accounts — private to this app, written up in `docs/`, never into a
+   capability's space (capabilities have none).
+7. **Config and secrets at the edge.** API keys (`ANTHROPIC_API_KEY`,
+   etc.) live in this app's environment; capabilities read them from the
+   environment they already expect. Nothing hard-coded, nothing
+   committed. `.env` is gitignored; `.env.example` is tracked.
+8. **One deployable.** This app is a single service with its own
+   lifecycle. Upgrading a capability = bump the pin + `uv lock` + a
+   `docs/PROGRESS.md` entry, on this app's schedule.
+9. **Prefect client only.** May import the Prefect API *client* to
+   trigger a flow; never `@flow` / `@task` / a scheduler.
+   `uv run lint-imports` forbids `prefect` outright until that exception
+   is deliberately made.
 
 ## Structure
 
 ```
-capability/            the module package — keep this name; nothing to rename
-  __init__.py          exposes run(), Input, Output — nothing else is public
-  _contract.py         the input/output shapes ("types" = the written shape of the data)
-  _core.py             internal implementation, organised however you like
-cli.py                 run the module in isolation from a terminal
+dashboard/
+  app.py               FastAPI app: login, an index, and two generic routes
+                       (GET/POST /p/{slug}) that drive every page from its Page spec
+  _auth.py             single-password session login (scrypt hash in the env)
+  _render.py           capability Markdown output -> HTML
+  hashpw.py            `python -m dashboard.hashpw` -> a password hash for .env
+  pages/
+    _spec.py           Page, Field, Section, FormReader, FormError — the page contract
+    __init__.py        PAGES registry
+    cover_letter_writer.py   page for the cover-letter-writer capability
+  templates/           base, login, index, page (generic form), result
+  static/app.css       plain, restyle to taste
 docs/
-  CONTRACT.md          the input/output spec — the product artifact; write it first
-  PROGRESS.md          dated log, newest entry on top
+  EXPERIENCE.md        the rules in prose + "Adding a page" walk-through
+  DEPLOY.md            serving it (uvicorn + reverse proxy, env, TLS)
+  PROGRESS.md          dated log, newest first
 tests/
-  test_run.py          proves run() honours the contract
-examples/
-  sample.txt           a real input, so cli.py works end to end immediately
+  test_pages.py        generic: every registered page renders + runs end to end (run() stubbed)
+  test_auth.py         the login gate
+  test_guardrails.py   the rules above, as assertions
+.importlinter          `uv run lint-imports`: no orchestration framework
 ```
 
-Managed with `uv` (`uv run ...`, `uv add ...`). Any LLM calls use the
-`anthropic` SDK and are an internal detail of `_core.py`.
+Managed with `uv` (`uv run ...`, `uv add ...`).
 
-## Running it in isolation
+## Running it
 
 ```
-uv run python cli.py --help
-uv run python cli.py --input examples/sample.txt > out.md
+uv run dashboard                       # http://127.0.0.1:8000
+uv run python -m dashboard.hashpw      # make a DASHBOARD_PASSWORD_HASH
 ```
-
-If `run(...)` can't produce anything useful without another module's
-output, the boundary is wrong.
 
 ## Checking the guardrails
 
 ```
-uv run lint-imports        # fails if the module imports an orchestration framework
-uv run pytest              # fails if run() breaks the contract
+uv run pytest              # pages render + run end to end; the rules hold
+uv run lint-imports        # no orchestration framework crept in
 ```
 
-## Releasing a new version
+## Adding a capability page
 
-The orchestrator consumes this repo as a **pinned git dependency**
-(`... @ git+https://…/<repo>.git@vX.Y.Z`), so every change other projects
-should pick up is a tagged release:
+The recurring task. Full version in `docs/EXPERIENCE.md`; in short:
 
-1. Make the change; `uv run pytest` and `uv run lint-imports` pass.
-2. Bump `version` in `pyproject.toml`, using what changed as the guide:
-   - **patch** (0.2.0 → 0.2.1) — prompt tweak or fix; inputs/outputs unchanged.
-   - **minor** (0.2.0 → 0.3.0) — new *optional* input, or better output;
-     existing callers unaffected.
-   - **major** (0.2.0 → 1.0.0) — the contract in `docs/CONTRACT.md`
-     changed (a required input added, output shape changed); callers
-     must update their code to match.
-3. Add a `docs/PROGRESS.md` entry.
-4. Commit, then `git tag vX.Y.Z` and push the tag.
+1. `uv add "<capability> @ git+https://github.com/onlinemoose/<capability>.git@vX.Y.Z"`
+2. Copy an existing page (`dashboard/pages/cover_letter_writer.py`) to `dashboard/pages/<capability>.py`.
+   Point it at the real `run` / `Input`; write `fields`, `example_form`,
+   `example_output`, `build_input`, `sections`.
+3. Register its `PAGE` in `dashboard/pages/__init__.py`.
+4. `uv run pytest` — the generic suite now covers it.
+5. `docs/PROGRESS.md` entry.
 
-Nothing here reaches into the orchestrator. It upgrades on its own
-schedule by moving its pin to the new tag.
+## Deploying — see docs/DEPLOY.md
 
-## Plugging into orchestration — not this repo's concern
-
-Something outside imports `capability.run` and calls it — directly, or
-wrapped as a Prefect task, or exposed as an AI tool / MCP server. None of
-that changes this repo. The module never knows which is happening.
-
-The orchestrator is its own separate project. Its build/deploy details
-(Dockerfile, `uv.lock`, `uv sync --frozen`, upgrading a pinned
-capability, rollback) live *there*, not in this template.
+This app is its own deployable: `uvicorn` behind a reverse proxy, with
+`SESSION_SECRET`, `DASHBOARD_PASSWORD_HASH`, and any capability API keys
+in the environment. Capabilities ride along as installed dependencies;
+they are never deployed on their own.

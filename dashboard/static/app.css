@@ -1,0 +1,73 @@
+/* Deliberately plain. Approximate the look of the main site later by
+   adjusting the tokens below; no framework, no build step. */
+:root {
+  --ink: #1a1a1a;
+  --ink-soft: #5c5c5c;
+  --bg: #fbfbf9;
+  --panel: #ffffff;
+  --line: #e2e0da;
+  --accent: #2b5c4b;
+  --error: #a3341f;
+  --radius: 6px;
+  --measure: 46rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ececec; --ink-soft: #a6a6a6; --bg: #16171a;
+    --panel: #1e1f23; --line: #34363c; --accent: #7fb6a2; --error: #e08a76;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 600; text-decoration: none; color: var(--ink); }
+.topbar nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
+.topbar nav a:hover { color: var(--ink); }
+main { padding: 2rem 1.25rem 4rem; }
+.panel { max-width: var(--measure); margin: 0 auto; }
+.panel.narrow { max-width: 22rem; }
+h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
+.lede, .pagelist__summary { color: var(--ink-soft); }
+.lede { margin-top: 0; }
+.crumb, .hint { font-size: 0.9rem; }
+.crumb a, .hint a { color: var(--accent); }
+.pagelist { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+.pagelist li { padding: 1rem 0; border-top: 1px solid var(--line); }
+.pagelist__title { font-weight: 600; }
+.pagelist a { text-decoration: none; color: var(--accent); }
+.pagelist__summary { margin: 0.25rem 0 0; font-size: 0.95rem; }
+.field { margin: 1.25rem 0; }
+.field label { display: block; font-weight: 600; margin-bottom: 0.2rem; }
+.field .help { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--ink-soft); }
+.field input, .field textarea {
+  width: 100%; padding: 0.55rem 0.65rem;
+  font: inherit; color: inherit; background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+.field textarea { resize: vertical; }
+.field--error input, .field--error textarea { border-color: var(--error); }
+.req { color: var(--error); }
+.error { color: var(--error); font-size: 0.9rem; margin: 0.3rem 0 0; }
+button, .button {
+  display: inline-block; margin-top: 0.5rem;
+  padding: 0.6rem 1.1rem; font: inherit; font-weight: 600;
+  color: #fff; background: var(--accent);
+  border: 0; border-radius: var(--radius); cursor: pointer; text-decoration: none;
+}
+button:hover, .button:hover { filter: brightness(1.05); }
+.result { border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.markdown :first-child { margin-top: 0; }
+.markdown pre {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 0.75rem; overflow-x: auto;
+}

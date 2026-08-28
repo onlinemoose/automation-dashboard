@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="panel">
+  <h1>Capabilities</h1>
+  <p class="lede">One page per capability. Pick one to run it.</p>
+  <ul class="pagelist">
+    {% for page in pages %}
+    <li>
+      <a href="/p/{{ page.slug }}"><span class="pagelist__title">{{ page.title }}</span></a>
+      <p class="pagelist__summary">{{ page.summary }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

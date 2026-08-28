@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} — result{% endblock %}
+{% block main %}
+<section class="panel">
+  <p class="crumb"><a href="/p/{{ page.slug }}">&larr; {{ page.title }}</a></p>
+  {% for section in sections %}
+  <article class="result">
+    <h2>{{ section.heading }}</h2>
+    <div class="markdown">{{ section.markdown | markdown }}</div>
+  </article>
+  {% endfor %}
+  <p><a class="button" href="/p/{{ page.slug }}">Run again</a></p>
+</section>
+{% endblock %}

@@ -1,23 +1,44 @@
 [project]
-name = "capability-module"
+# Rename to your dashboard's name if you keep more than one experience app.
+name = "automation-dashboard"
 version = "0.1.0"
-description = "One discrete capability with a clear contract."
+description = "The automation system's dashboard: one web page per capability, each form built from the capability's contract."
 requires-python = ">=3.12"
 dependencies = [
-    "anthropic>=1.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "jinja2>=3.1",
+    "markupsafe>=2.1",
+    "python-multipart>=0.0.9",
+    "itsdangerous>=2.2",
+    "markdown>=3.7",
+    # Capability modules, one per page. Added with:
+    #   uv add "<name> @ git+https://github.com/onlinemoose/<name>.git@vX.Y.Z"
+    # which records the pin in [tool.uv.sources] below and the exact commit
+    # in uv.lock.
+    "cover-letter-writer",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "httpx>=0.27",
     "import-linter>=2",
+    "python-dotenv>=1",
 ]
 
-[tool.uv]
-# This is a script/module project, not an installable package.
-package = false
+[project.scripts]
+dashboard = "dashboard.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dashboard"]
 
 [tool.pytest.ini_options]
-# Put the repo root on the import path so tests can `import capability`
-# without the project being installed as a package.
-pythonpath = ["."]
+addopts = "-q"
+
+[tool.uv.sources]
+cover-letter-writer = { git = "https://github.com/onlinemoose/cover-letter-writer.git", rev = "v0.9.0" }

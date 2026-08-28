@@ -1,0 +1,102 @@
+"""The shape of a dashboard page.
+
+A `Page` mirrors one capability's contract and nothing else:
+
+- `fields`        -> the capability's `Input` (one form field per argument)
+- `build_input`   -> turns the submitted form into that `Input`
+- `run`           -> the capability's `run()` (the only call into it)
+- `sections`      -> turns its `Output` into headed blocks of Markdown
+- `example_form`  -> a valid demo submission (also powers "Load example")
+- `example_output`-> a canned `Output`, so tests exercise the page offline
+
+If filling any of these in means reaching past the capability's front
+door, or teaching the page how the work is done, the boundary is wrong.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+
+# Widgets the generic form renderer knows how to draw.
+#   "text"     - single-line input
+#   "textarea" - multi-line box
+#   "number"   - single-line numeric input
+#   "lines"    - multi-line box; each non-blank line is one list item
+Widget = str
+
+
+class FormError(Exception):
+    """Raised by `build_input` when the submitted form can't be used.
+
+    Carries `{field_name: message}` so the form re-renders with each
+    problem shown next to its field.
+    """
+
+    def __init__(self, errors: Mapping[str, str]) -> None:
+        self.errors: dict[str, str] = dict(errors)
+        super().__init__("; ".join(f"{k}: {v}" for k, v in self.errors.items()))
+
+
+@dataclass(frozen=True)
+class Field:
+    name: str  # must match the capability Input argument name
+    label: str
+    widget: Widget = "textarea"
+    required: bool = False
+    help: str = ""
+    placeholder: str = ""
+
+
+@dataclass(frozen=True)
+class Section:
+    heading: str
+    markdown: str
+
+
+@dataclass
+class Page:
+    slug: str
+    title: str
+    summary: str
+    fields: Sequence[Field]
+    example_form: Mapping[str, str]
+    example_output: object
+    build_input: Callable[[Mapping[str, str]], object]
+    run: Callable[[object], object]
+    sections: Callable[[object], list[Section]]
+
+
+class FormReader:
+    """Small helper for `build_input`: reads fields, collects problems,
+    raises one `FormError` with all of them at `done()`."""
+
+    def __init__(self, form: Mapping[str, str]) -> None:
+        self._form = form
+        self._errors: dict[str, str] = {}
+
+    def text(self, name: str, label: str, *, required: bool = False) -> str | None:
+        value = (self._form.get(name) or "").strip()
+        if not value:
+            if required:
+                self._errors[name] = f"{label} is required."
+            return None
+        return value
+
+    def integer(self, name: str, label: str) -> int | None:
+        raw = (self._form.get(name) or "").strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            self._errors[name] = f"{label} must be a whole number."
+            return None
+
+    def lines(self, name: str) -> list[str]:
+        raw = self._form.get(name) or ""
+        return [line.strip() for line in raw.splitlines() if line.strip()]
+
+    def done(self) -> None:
+        if self._errors:
+            raise FormError(self._errors)
