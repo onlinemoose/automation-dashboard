@@ -1,0 +1,34 @@
+# Render service definition — reference / reproducibility.
+#
+# The live service (automation-dashboard-r9i7) was created by hand in the
+# Render dashboard; committing this file does NOT retroactively bind it.
+# It matters when recreating the service, or if the service is later
+# connected as a Blueprint. Keep it in step with the dashboard settings.
+#
+# Secrets (SESSION_SECRET, DASHBOARD_PASSWORD_HASH, ANTHROPIC_API_KEY,
+# GH_TOKEN) are set in the dashboard, never here — `sync: false` declares
+# them without a value. See docs/DEPLOYMENT_CHECKLIST.md.
+
+services:
+  - type: web
+    name: automation-dashboard
+    runtime: python
+    plan: free                        # spins down after 15 min idle, ~30–60s cold start; "starter" ($7/mo) removes it
+    branch: main
+    autoDeploy: true
+    # region: frankfurt               # set to match the region picked in the dashboard
+    buildCommand: 'git config --global url."https://${GH_TOKEN}@github.com/".insteadOf "https://github.com/" && uv sync --frozen --no-dev && uv cache prune --ci'
+    startCommand: "uv run --no-sync uvicorn dashboard.app:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: DASHBOARD_HTTPS
+        value: "1"
+      - key: SESSION_SECRET
+        sync: false
+      - key: DASHBOARD_PASSWORD_HASH
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GH_TOKEN                  # fetches the private cover-letter-writer repo during build
+        sync: false
+    # Python version comes from .python-version (3.12).

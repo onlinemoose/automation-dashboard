@@ -3,6 +3,17 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-29 — Post-deploy tidy-up
+
+- `.python-version` = `3.12` pinned (was relying on Render's default).
+- `render.yaml` added as a reference copy of the service config
+  (live service was created by hand; the file doesn't bind it).
+- `dashboard/__main__.py` now honours `PORT` and binds `0.0.0.0` on a
+  platform, so `uv run dashboard` works as a start command too.
+- Download `.md` links confirmed on the live site. Phase 1 closed.
+- Left for the Render dashboard: Ignored Paths `docs/**`; optional custom
+  domain.
+
 ## 2026-08-29 — First Render deploy; threadpool fix for blocking run()
 
 - Deployed to Render free. First real run surfaced 502s on `/static/*`

@@ -53,16 +53,18 @@ nothing else changes.
 
 ### Still open (not blocking)
 
-- [ ] Set `PYTHON_VERSION` explicitly (or add `.python-version` with
-      `3.12`) — build currently uses Render's default Python; pin it so an
-      upstream default bump can't surprise us. `pyproject.toml` requires
-      `>=3.12`.
-- [ ] (Optional) Add `render.yaml` at the repo root (template below) so
-      the service config is version-controlled, not dashboard-only.
+- [x] Pin Python: `.python-version` = `3.12` at the repo root.
+- [x] `render.yaml` at the repo root — reference copy of the service
+      config (the live service was made by hand; the file doesn't bind it
+      retroactively).
+- [x] `dashboard/__main__.py` reads `PORT` (and binds `0.0.0.0` when it's
+      set), so `uv run dashboard` also works as a platform start command.
+- [x] Download `.md` links confirmed working on the live site.
+- [ ] Render dashboard → service → Settings → **Ignored Paths**: add
+      `docs/**` so doc-only commits don't trigger a redeploy. (Manual —
+      dashboard only.)
 - [ ] (Optional) Custom domain in Render (free plan supports it + auto
       TLS). `DASHBOARD_HTTPS` is already `1`.
-- [ ] Click a **Download .md** link on the live result page to confirm
-      the `data:` URI download works in the deployed context.
 
 ### Optional cleanup
 
