@@ -66,6 +66,14 @@ button, .button {
 }
 button:hover, .button:hover { filter: brightness(1.05); }
 .result { border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.result__head { display: flex; align-items: center; gap: 1rem; }
+.result__head h2 { flex: 1; }
+.button--ghost {
+  margin: 0 0 0 auto; padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 600;
+  color: var(--accent); background: transparent; border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.button--ghost:hover { filter: none; background: var(--bg); }
 .markdown :first-child { margin-top: 0; }
 .markdown pre {
   background: var(--panel); border: 1px solid var(--line);

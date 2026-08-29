@@ -3,6 +3,19 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-29 — Result sections are downloadable as .md
+
+- `templates/result.html`: every result section now has a **Download .md**
+  link beside its heading — a `data:text/markdown` URI with a `download`
+  filename (`<page-slug>-<heading>.md`). No new route, no re-running the
+  capability, no JavaScript; the link carries the same raw Markdown the
+  page already rendered.
+- Generic: applies to every page's `sections()` output, not just the
+  cover letter. `tests/test_pages.py` covers it for every registered page.
+- `.venv` rebuilt after the folder rename (stale absolute paths in the
+  console scripts); `git remote` origin repointed to
+  `github.com/onlinemoose/automation-dashboard.git`.
+
 ## 2026-08-29 — Seeded automation-dashboard; first real page
 
 - This repo (was `cover-letter-writer-fe`, a stale capability-template

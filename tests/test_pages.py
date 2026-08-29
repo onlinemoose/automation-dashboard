@@ -67,6 +67,17 @@ def test_example_submission_runs_end_to_end(page, monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
+def test_result_offers_a_markdown_download_per_section(page, monkeypatch) -> None:
+    monkeypatch.setattr(page, "run", lambda data: page.example_output)
+    client = TestClient(create_app(auth_disabled=True))
+    resp = client.post(f"/p/{page.slug}", data=dict(page.example_form))
+
+    assert resp.status_code == 200, resp.text
+    assert "data:text/markdown" in resp.text
+    assert resp.text.count('download="') >= len(page.sections(page.example_output))
+
+
+@pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
 def test_empty_submission_is_rejected_when_fields_are_required(client: TestClient, page) -> None:
     if not any(f.required for f in page.fields):
         pytest.skip("no required fields")

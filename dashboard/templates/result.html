@@ -5,7 +5,12 @@
   <p class="crumb"><a href="/p/{{ page.slug }}">&larr; {{ page.title }}</a></p>
   {% for section in sections %}
   <article class="result">
-    <h2>{{ section.heading }}</h2>
+    <div class="result__head">
+      <h2>{{ section.heading }}</h2>
+      <a class="button button--ghost"
+         download="{{ page.slug }}-{{ section.heading | lower | replace(' ', '-') }}.md"
+         href="data:text/markdown;charset=utf-8,{{ section.markdown | urlencode }}">Download .md</a>
+    </div>
     <div class="markdown">{{ section.markdown | markdown }}</div>
   </article>
   {% endfor %}
