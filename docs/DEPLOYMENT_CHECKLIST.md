@@ -21,61 +21,48 @@ nothing else changes.
 
 ---
 
-## Phase 1 — First deploy
+## Phase 1 — First deploy — DONE (2026-08-29)
 
-- [ ] Create a Render account, connect the GitHub repo
+**Live:** https://automation-dashboard-r9i7.onrender.com — Render free plan.
+
+- [x] Create a Render account, connect the GitHub repo
       (`onlinemoose/automation-dashboard`).
-- [ ] New Web Service → pick the **Region** closest to users
-      (Frankfurt for EU/UK). Region can't be changed later without
-      recreating the service.
-- [ ] Set `PYTHON_VERSION=3.12` as an env var (or add a `.python-version`
-      file at the repo root with `3.12` — `pyproject.toml` requires
-      `>=3.12`).
-- [ ] Build command: `uv sync --frozen --no-dev && uv cache prune --ci`
-      (Render prefills this without `--no-dev`).
-- [ ] Start command:
+- [x] New Web Service, region chosen. Region can't be changed later
+      without recreating the service.
+- [x] Build command: `git config --global url."https://${GH_TOKEN}@github.com/".insteadOf "https://github.com/" && uv sync --frozen --no-dev && uv cache prune --ci`
+- [x] Start command:
       `uv run --no-sync uvicorn dashboard.app:app --host 0.0.0.0 --port $PORT`
-- [ ] Compute: **Free**.
-- [ ] Advanced → Health Check Path: `/health`. Auto-deploy: on.
+- [x] Compute: **Free**.
+- [x] Health Check Path: `/health`. Auto-deploy on `main`: on (confirmed
+      — the threadpool fix deployed on push).
+- [x] **Private capability repo** (`cover-letter-writer`): fine-grained
+      GitHub PAT (Contents: Read-only) as env var `GH_TOKEN` + the
+      `git config … insteadOf` prefix in the build command. **PAT expires
+      ≤1 year — rotating it is a recurring task** (same build error
+      returns when it lapses).
+- [x] Secret env vars set by hand: `SESSION_SECRET` (fresh, via Render's
+      Generate), `DASHBOARD_PASSWORD_HASH`, `ANTHROPIC_API_KEY`,
+      `GH_TOKEN`. `DASHBOARD_HTTPS=1`.
+- [x] `DASHBOARD_STUB_RUNS` unset (confirmed — a real letter generated,
+      no stub banner).
+- [x] Smoke test: `/health` 200; `/` → `/login`; login works; real
+      cover-letter run returns a letter; `/static/app.css` 200 `text/css`.
+- [x] Threadpool fix for the blocking `run()` (commit `90e4696`) — first
+      real run 502'd on assets until this landed. See Log below.
+- [x] `docs/PROGRESS.md` entry.
+
+### Still open (not blocking)
+
+- [ ] Set `PYTHON_VERSION` explicitly (or add `.python-version` with
+      `3.12`) — build currently uses Render's default Python; pin it so an
+      upstream default bump can't surprise us. `pyproject.toml` requires
+      `>=3.12`.
 - [ ] (Optional) Add `render.yaml` at the repo root (template below) so
-      the config is version-controlled instead of dashboard-only.
-- [ ] **Private capability repos:** `uv sync` clones each capability from
-      GitHub during build; Render has no git credentials, so a private
-      capability repo fails the build with `could not read Username for
-      'https://github.com'`. Fix: a fine-grained GitHub PAT (resource
-      owner `onlinemoose`, only the capability repos, **Contents:
-      Read-only**), added as env var `GH_TOKEN`, and prepend to the build
-      command:
-      `git config --global url."https://${GH_TOKEN}@github.com/".insteadOf "https://github.com/" && `
-      Fine-grained PATs expire (≤1 year) — rotating it is a recurring
-      task. Alternatives: make the capability repo public, or use an SSH
-      deploy key + an `ssh://` URL in `[tool.uv.sources]`.
-- [ ] Set the secret env vars in the Render dashboard (never in
-      `render.yaml`): `SESSION_SECRET`, `DASHBOARD_PASSWORD_HASH`,
-      `ANTHROPIC_API_KEY`. See the table below. **Add them by hand — do
-      not use "Add from .env"**: local `.env` carries a dev
-      `SESSION_SECRET` and `DASHBOARD_STUB_RUNS=1`, neither of which
-      should reach production.
-- [ ] Generate a **fresh** `SESSION_SECRET` for production — do not reuse
-      the one in local `.env`:
-      `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-- [ ] Generate the production `DASHBOARD_PASSWORD_HASH`:
-      `uv run python -m dashboard.hashpw`
-- [ ] Confirm `DASHBOARD_STUB_RUNS` is **unset or 0** on Render (stub
-      mode must never be on in production).
-- [ ] Set `DASHBOARD_HTTPS=1` (Render terminates TLS; this marks the
-      session cookie `Secure`).
-- [ ] First deploy. Watch the build log for the `uv sync` step.
-- [ ] Smoke test: `/health` returns `{"ok": true}`; `/` redirects to
-      `/login`; log in; run the cover-letter page against the real API
-      once and confirm a letter comes back within the request window.
-- [ ] Check the Markdown download links work from the deployed result
-      page (they're `data:` URIs — no server round trip, so they should).
-- [ ] Add the custom domain (e.g. `tools.example.net`) in Render (the
-      free plan supports custom domains + automatic TLS). `DASHBOARD_HTTPS`
-      is already `1`, so nothing else to change.
-- [ ] Confirm auto-deploy on push to `main` is on (Render default).
-- [ ] `docs/PROGRESS.md` entry: deployed, at which URL, on which plan.
+      the service config is version-controlled, not dashboard-only.
+- [ ] (Optional) Custom domain in Render (free plan supports it + auto
+      TLS). `DASHBOARD_HTTPS` is already `1`.
+- [ ] Click a **Download .md** link on the live result page to confirm
+      the `data:` URI download works in the deployed context.
 
 ### Optional cleanup
 
@@ -227,5 +214,11 @@ services:
 
 ## Log
 
-- _(add dated entries here as phases land; mirror the headline into
-  `docs/PROGRESS.md`)_
+- **2026-08-29** — First deploy to Render free
+  (`automation-dashboard-r9i7.onrender.com`). Build needed `GH_TOKEN` +
+  the `git config … insteadOf` prefix to fetch the private
+  `cover-letter-writer` repo. First real letter run 502'd on
+  `/static/*` right afterwards: the synchronous `run()` blocked the
+  event loop, `/health` failed, Render restarted the instance
+  mid-request. Fixed by offloading `run()` with `run_in_threadpool`
+  (commit `90e4696`). Verified working.
