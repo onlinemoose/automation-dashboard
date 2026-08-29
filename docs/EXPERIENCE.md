@@ -158,7 +158,12 @@ entry. A bad upgrade is a one-line pin revert.
 
 ## Long calls
 
-`run()` for an LLM-backed capability can take 30–60s. Today the POST is
+`run()` for an LLM-backed capability can take 30–60s. The POST is
 synchronous — the browser waits, the page shows "this can take up to a
-minute". A job queue (submit, poll, collect) is a deliberate later
-addition, not part of this template.
+minute". The `run()` call is offloaded to a worker thread
+(`run_in_threadpool`) so it doesn't block the event loop: other requests,
+and the platform health check, keep being answered while a letter is
+generating. Without that, a blocked event loop fails the health check and
+the host restarts the instance mid-request (seen as 502s on the assets
+right after the result page). A job queue (submit, poll, collect) is a
+deliberate later addition, not part of this template.

@@ -3,6 +3,19 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-29 — First Render deploy; threadpool fix for blocking run()
+
+- Deployed to Render free. First real run surfaced 502s on `/static/*`
+  right after the result page, and an unstyled result page as a result.
+- Cause: `page.run()` is synchronous (LLM call, 30–60s) and was called
+  directly in the async POST handler, blocking the event loop. `/health`
+  stopped responding, Render marked the instance unhealthy and restarted
+  it mid-request.
+- Fix: `dashboard/app.py` now offloads `run()` with
+  `starlette.concurrency.run_in_threadpool`. Tests unchanged (15 pass).
+- Build needed a `GH_TOKEN` env var + `git config … insteadOf` prefix in
+  the build command to fetch the private `cover-letter-writer` repo.
+
 ## 2026-08-29 — Deployment target chosen: Render
 
 - Host decision: **Render**, free web service (512 MB / 0.1 CPU; spins

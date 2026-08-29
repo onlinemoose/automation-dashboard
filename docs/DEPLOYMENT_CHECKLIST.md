@@ -25,14 +25,37 @@ nothing else changes.
 
 - [ ] Create a Render account, connect the GitHub repo
       (`onlinemoose/automation-dashboard`).
-- [ ] Add `.python-version` at the repo root containing `3.12`
-      (matches local; `pyproject.toml` requires `>=3.12`).
-- [ ] Add `render.yaml` at the repo root (template below) and let Render
-      pick it up as a Blueprint — or configure the same fields by hand in
-      the dashboard.
+- [ ] New Web Service → pick the **Region** closest to users
+      (Frankfurt for EU/UK). Region can't be changed later without
+      recreating the service.
+- [ ] Set `PYTHON_VERSION=3.12` as an env var (or add a `.python-version`
+      file at the repo root with `3.12` — `pyproject.toml` requires
+      `>=3.12`).
+- [ ] Build command: `uv sync --frozen --no-dev && uv cache prune --ci`
+      (Render prefills this without `--no-dev`).
+- [ ] Start command:
+      `uv run --no-sync uvicorn dashboard.app:app --host 0.0.0.0 --port $PORT`
+- [ ] Compute: **Free**.
+- [ ] Advanced → Health Check Path: `/health`. Auto-deploy: on.
+- [ ] (Optional) Add `render.yaml` at the repo root (template below) so
+      the config is version-controlled instead of dashboard-only.
+- [ ] **Private capability repos:** `uv sync` clones each capability from
+      GitHub during build; Render has no git credentials, so a private
+      capability repo fails the build with `could not read Username for
+      'https://github.com'`. Fix: a fine-grained GitHub PAT (resource
+      owner `onlinemoose`, only the capability repos, **Contents:
+      Read-only**), added as env var `GH_TOKEN`, and prepend to the build
+      command:
+      `git config --global url."https://${GH_TOKEN}@github.com/".insteadOf "https://github.com/" && `
+      Fine-grained PATs expire (≤1 year) — rotating it is a recurring
+      task. Alternatives: make the capability repo public, or use an SSH
+      deploy key + an `ssh://` URL in `[tool.uv.sources]`.
 - [ ] Set the secret env vars in the Render dashboard (never in
       `render.yaml`): `SESSION_SECRET`, `DASHBOARD_PASSWORD_HASH`,
-      `ANTHROPIC_API_KEY`. See the table below.
+      `ANTHROPIC_API_KEY`. See the table below. **Add them by hand — do
+      not use "Add from .env"**: local `.env` carries a dev
+      `SESSION_SECRET` and `DASHBOARD_STUB_RUNS=1`, neither of which
+      should reach production.
 - [ ] Generate a **fresh** `SESSION_SECRET` for production — do not reuse
       the one in local `.env`:
       `python -c "import secrets; print(secrets.token_urlsafe(32))"`
@@ -131,6 +154,7 @@ integrations, and Apple has no clean API path).
 | `SESSION_SECRET` | fresh `secrets.token_urlsafe(32)` — **not** the local one | dashboard (secret) |
 | `DASHBOARD_PASSWORD_HASH` | `uv run python -m dashboard.hashpw` | dashboard (secret) |
 | `ANTHROPIC_API_KEY` | the real key | dashboard (secret) |
+| `GH_TOKEN` | fine-grained PAT, read-only Contents on the private capability repos | dashboard (secret) |
 | `DASHBOARD_HTTPS` | `1` | `render.yaml` ok |
 | `DASHBOARD_STUB_RUNS` | unset, or `0` | — must not be `1` |
 | `PYTHON_VERSION` | `3.12` (or use `.python-version`) | `render.yaml` ok |
@@ -150,7 +174,7 @@ services:
     plan: free                        # spins down after 15 min idle, ~30–60s cold start; swap to "starter" ($7/mo) to remove it
     branch: main
     autoDeploy: true
-    buildCommand: "pip install uv && uv sync --frozen --no-dev"
+    buildCommand: 'git config --global url."https://${GH_TOKEN}@github.com/".insteadOf "https://github.com/" && uv sync --frozen --no-dev && uv cache prune --ci'
     startCommand: "uv run --no-sync uvicorn dashboard.app:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /health
     envVars:
@@ -164,6 +188,8 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: GH_TOKEN                  # fetches private capability repos during build
+        sync: false
 ```
 
 ### Known gotchas
@@ -174,17 +200,28 @@ services:
 - **Free usage cap:** Render free instances share 750 instance-hours /
   month per workspace — one service is well within it. A second
   always-on free service would blow the cap.
-- **`uv` on Render:** the explicit `pip install uv && uv sync` build
-  command is used rather than relying on auto-detection. `uv sync`
-  installs the project itself, so `dashboard` is importable.
+- **`uv` on Render:** Render detects `uv.lock` and provides `uv` in the
+  build environment — it prefills `uv sync --frozen && uv cache prune
+  --ci`; we just add `--no-dev`. `uv sync` installs the project itself,
+  so `dashboard` is importable.
+- **Private capability repos need `GH_TOKEN`:** `uv sync` shells out to
+  `git` to fetch each capability; Render's build has no credentials, so a
+  private repo fails with `could not read Username for
+  'https://github.com'`. The `git config … insteadOf` prefix in the
+  build command injects the PAT. Same error returns when the PAT
+  expires.
 - **`uv run --no-sync`** in the start command stops uv from re-syncing
   (and hitting the network) on every boot.
 - **Long requests:** Render has no hard request timeout, so the 30–60s
   letter call is fine. (This is why we're not on Fly.io, which closes
   idle connections at 60s.)
-- **One worker:** the default is a single uvicorn worker; a long LLM call
-  blocks it. Fine for low concurrency. Scale workers or add a job queue
-  only if real concurrency shows up (see `DEPLOY.md`).
+- **One worker:** the default is a single uvicorn worker. The `run()`
+  call is offloaded to a thread (`run_in_threadpool` in `app.py`) so it
+  doesn't block the event loop — the health check keeps responding during
+  a 30–60s letter. Without that, the blocked loop fails `/health`, Render
+  restarts the instance mid-request, and assets 502 right after the
+  result page. Scale workers or add a job queue only if real concurrency
+  shows up (see `DEPLOY.md`).
 
 ---
 

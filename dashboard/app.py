@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from dashboard._auth import is_authed, password_hash, verify_password
@@ -125,7 +126,10 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         if app.state.stub_runs:
             output = page.example_output  # stub mode: no capability call
         else:
-            output = page.run(data)  # the one call into the capability; can take a while
+            # `run()` is synchronous and can take 30–60s (LLM call). Offload it
+            # to a worker thread so the event loop stays free to answer other
+            # requests — including the platform health check.
+            output = await run_in_threadpool(page.run, data)
         return render("result.html", request, page=page, sections=page.sections(output))
 
     return app
