@@ -36,6 +36,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dashboard"]
+# non-.py files under dashboard/ (templates, static, page example inputs)
+# are included in the build by default.
 
 [tool.pytest.ini_options]
 addopts = "-q"

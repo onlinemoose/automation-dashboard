@@ -8,9 +8,18 @@ operator-config inputs `house_style` / `expert_guidance`.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from cover_letter_writer import Emphasis, Input, Output, run
 
 from dashboard.pages._spec import Field, FormReader, Page, Section
+
+# Demo inputs, vendored into this repo (a neutralised, shortened real
+# posting + a matching fictional CV). They belong to the page, not the
+# capability — the capability's own examples aren't part of its contract
+# and aren't in the installed package. Swap `cv.md` for your own CV to
+# make "Load example" produce a letter you'd actually send.
+_EXAMPLES = Path(__file__).parent / "_examples" / "cover_letter_writer"
 
 FIELDS = (
     Field(
@@ -79,36 +88,27 @@ FIELDS = (
 )
 
 EXAMPLE_FORM = {
-    "job_posting": (
-        "Senior Backend Engineer — Acme Payments\n\n"
-        "You will own our payments service end to end: the ledger, reconciliation, "
-        "and the partner API. We run Python and Postgres. Experience with double-entry "
-        "accounting systems and high-volume transaction data is a strong plus."
-    ),
-    "cv": (
-        "Eight years building payment systems in Python. At Fintech Co I led the "
-        "migration to Stripe and rebuilt the double-entry ledger, cutting monthly "
-        "reconciliation breaks by 90%. Deep Postgres experience, including partitioning "
-        "transaction tables past 500M rows and tuning the reconciliation queries."
-    ),
-    "job_company": "Acme Payments",
+    "job_posting": (_EXAMPLES / "job_posting.md").read_text(),
+    "cv": (_EXAMPLES / "cv.md").read_text(),
+    "emphasis": (_EXAMPLES / "emphasis.md").read_text(),
     "tone": "measured",
-    "emphasis": "lead with the ledger rebuild\nname the reconciliation numbers",
-    "max_words": "300",
+    "max_words": "350",
 }
 
 EXAMPLE_OUTPUT = Output(
     cover_letter=(
         "Dear Hiring Team,\n\n"
-        "I want to apply for the Senior Backend Engineer role at Acme Payments.\n\n"
-        "_(Example output. The real letter is written by the capability when you run it.)_\n"
+        "I want to apply for the Product Lead role at your company.\n\n"
+        "_(Example output. The real letter is written by the capability when you "
+        "run it against a live API key.)_\n"
     ),
     targeting_note=(
-        "- **Own the payments service end to end** — answered with the Fintech Co "
-        "ledger rebuild and Stripe migration.\n"
-        "- **Python and Postgres** — covered directly.\n"
-        "- **Double-entry accounting / high-volume data** — covered (90% fewer "
-        "reconciliation breaks, 500M-row partitioning).\n"
+        "- **Fix activation and retention** — answered with the onboarding redesign "
+        "that lifted first-session completion from 48% to 82%.\n"
+        "- **Hands-on AI/ML product experience** — the retrieval-based assistant "
+        "feature and its adoption numbers.\n"
+        "- **Grow a small team** — 4 to 11, including hiring PMs and setting process.\n"
+        "- **Not covered by the CV:** direct pricing / P&L advisory to C-level.\n"
     ),
 )
 
