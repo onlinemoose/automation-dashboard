@@ -3,6 +3,31 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-29 — Deployment target chosen: Render
+
+- Host decision: **Render**, free web service (512 MB / 0.1 CPU; spins
+  down after 15 min idle → ~30–60s cold start, accepted for now).
+  Upgrade to Starter ($7/mo) later is a one-line `plan:` change. Picked
+  over Railway (usage-metered) and Fly.io (60s idle-connection close is a
+  hazard for our silent 30–60s letter POST).
+- `docs/DEPLOYMENT_CHECKLIST.md` — living to-do: Phase 1 first deploy
+  (render.yaml template, env vars, smoke test), Phase 2 multi-user auth
+  (Option B, env-var hash list — not built), Phase 3 real accounts + DB
+  (fastapi-users + SQLModel + Neon/Supabase — future), Phase 4 calendar
+  via screenshot + vision model (future).
+- Nothing deployed yet; no code changes.
+
+## 2026-08-29 — Stub mode for cost-free UI work
+
+- `DASHBOARD_STUB_RUNS=1` (or `create_app(stub_runs=True)`): every
+  `POST /p/{slug}` renders that page's `example_output` instead of
+  calling the capability. No API key, no cost, no wait. A banner shows
+  while it's on. Documented in `docs/EXPERIENCE.md`, `.env.example`.
+- Local `.env` is set to `1` for now (UI iteration); flip to `0` for a
+  real run.
+- `tests/test_pages.py`: asserts stub mode renders `example_output` and
+  never calls `run()`.
+
 ## 2026-08-29 — Result sections are downloadable as .md
 
 - `templates/result.html`: every result section now has a **Download .md**

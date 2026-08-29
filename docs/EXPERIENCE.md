@@ -127,6 +127,18 @@ for `build_input` logic that's worth pinning (parsing, defaults).
 
 Add a `docs/PROGRESS.md` entry: which capability, pinned at which tag.
 
+## Stub mode — the UI without the API
+
+`DASHBOARD_STUB_RUNS=1` (or `create_app(stub_runs=True)`) makes every
+`POST /p/{slug}` skip `page.run()` and render that page's
+`example_output` instead. No API key, no cost, no 30–60s wait — the whole
+app is clickable for UI work and demos. A banner shows while it's on.
+
+It exercises everything the experience layer owns (the form,
+`build_input`, `sections()`, the result template) but *not* the
+capability call — that has its own tests. `tests/test_pages.py` asserts
+stub mode renders `example_output` without calling `run()`.
+
 ## Chaining capabilities
 
 When a page needs two capabilities — e.g. extract text from an upload,

@@ -104,6 +104,7 @@ Managed with `uv` (`uv run ...`, `uv add ...`).
 ```
 uv run dashboard                       # http://127.0.0.1:8000
 uv run python -m dashboard.hashpw      # make a DASHBOARD_PASSWORD_HASH
+DASHBOARD_STUB_RUNS=1 uv run dashboard # click through the UI with no API calls
 ```
 
 ## Checking the guardrails

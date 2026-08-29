@@ -4,6 +4,10 @@ This app is its own deployable — one `uvicorn` process behind a reverse
 proxy. Capabilities are installed dependencies inside it; they are never
 deployed separately.
 
+> **Target host: Render.** `docs/DEPLOYMENT_CHECKLIST.md` has the
+> Render-specific plan, a `render.yaml` template, and the running task
+> list (auth, database, calendar). This file stays host-agnostic.
+
 ## Environment
 
 Set these in the process environment (not committed):

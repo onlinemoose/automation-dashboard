@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+  {% if stub_runs %}
+  <p class="stubbanner">Stub mode — results are canned <code>example_output</code>; no capability is called.</p>
+  {% endif %}
   <header class="topbar">
     <a class="brand" href="/">Automation&nbsp;Dashboard</a>
     <nav>{% block nav %}<a href="/logout">Sign out</a>{% endblock %}</nav>

@@ -33,6 +33,12 @@ body {
 .topbar nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
 .topbar nav a:hover { color: var(--ink); }
 main { padding: 2rem 1.25rem 4rem; }
+.stubbanner {
+  margin: 0; padding: 0.6rem 1.25rem; font-size: 0.85rem;
+  color: var(--ink); background: #f3e5c3; border-bottom: 1px solid var(--line);
+}
+.stubbanner code { background: rgba(0, 0, 0, 0.06); padding: 0 0.25rem; border-radius: 3px; }
+@media (prefers-color-scheme: dark) { .stubbanner { background: #3a3320; } }
 .panel { max-width: var(--measure); margin: 0 auto; }
 .panel.narrow { max-width: 22rem; }
 h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }

@@ -67,6 +67,21 @@ def test_example_submission_runs_end_to_end(page, monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
+def test_stub_mode_renders_example_output_without_calling_run(page, monkeypatch) -> None:
+    def boom(data):
+        raise AssertionError(f"{page.slug}: stub mode still called the capability")
+
+    monkeypatch.setattr(page, "run", boom)
+    client = TestClient(create_app(auth_disabled=True, stub_runs=True))
+    resp = client.post(f"/p/{page.slug}", data=dict(page.example_form))
+
+    assert resp.status_code == 200, resp.text
+    assert "Stub mode" in resp.text
+    for section in page.sections(page.example_output):
+        assert section.heading in resp.text
+
+
+@pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
 def test_result_offers_a_markdown_download_per_section(page, monkeypatch) -> None:
     monkeypatch.setattr(page, "run", lambda data: page.example_output)
     client = TestClient(create_app(auth_disabled=True))

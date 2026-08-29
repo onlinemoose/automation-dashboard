@@ -39,9 +39,12 @@ def _session_secret() -> str:
     return value
 
 
-def create_app(*, auth_disabled: bool = False) -> FastAPI:
+def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastAPI:
     app = FastAPI(title="Automation Dashboard")
     app.state.auth_disabled = auth_disabled
+    # Stub mode: skip the capability call, render its `example_output`. Lets
+    # you click through the whole app with no API key, no cost, no wait.
+    app.state.stub_runs = stub_runs or os.environ.get("DASHBOARD_STUB_RUNS", "0") == "1"
     app.add_middleware(
         SessionMiddleware,
         secret_key=_session_secret(),
@@ -52,6 +55,7 @@ def create_app(*, auth_disabled: bool = False) -> FastAPI:
 
     templates = Jinja2Templates(directory=str(_TEMPLATES))
     templates.env.filters["markdown"] = to_html
+    templates.env.globals["stub_runs"] = app.state.stub_runs
 
     def render(name: str, request: Request, /, status_code: int = 200, **ctx):
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
@@ -118,7 +122,10 @@ def create_app(*, auth_disabled: bool = False) -> FastAPI:
                 "page.html", request, status_code=422,
                 page=page, values=form, errors=exc.errors,
             )
-        output = page.run(data)  # the one call into the capability; can take a while
+        if app.state.stub_runs:
+            output = page.example_output  # stub mode: no capability call
+        else:
+            output = page.run(data)  # the one call into the capability; can take a while
         return render("result.html", request, page=page, sections=page.sections(output))
 
     return app
