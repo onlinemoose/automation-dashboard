@@ -60,7 +60,7 @@ nothing else changes.
 - [x] `dashboard/__main__.py` reads `PORT` (and binds `0.0.0.0` when it's
       set), so `uv run dashboard` also works as a platform start command.
 - [x] Download `.md` links confirmed working on the live site.
-- [ ] Render dashboard → service → Settings → **Ignored Paths**: add
+- [x] Render dashboard → service → Settings → **Ignored Paths**: add
       `docs/**` so doc-only commits don't trigger a redeploy. (Manual —
       dashboard only.)
 - [ ] (Optional) Custom domain in Render (free plan supports it + auto
