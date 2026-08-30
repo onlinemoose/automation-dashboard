@@ -12,7 +12,8 @@ from pathlib import Path
 
 from cv_writer import Cost, Emphasis, Input, Output, run
 
-from dashboard import _documents
+from dashboard import _documents, _jobs
+from dashboard._job_analysis import parse_annotated_emphasis
 from dashboard.pages._spec import Field, FormReader, Page, RunMeta, Section
 
 # The pinned tag, kept in step with `[tool.uv.sources]` in pyproject.toml.
@@ -29,11 +30,18 @@ _EXAMPLES = Path(__file__).parent / "_examples" / "cv_writer"
 
 FIELDS = (
     Field(
+        "job_post_id",
+        "Load a saved job post",
+        widget="picker",
+        help="Optional. Pick one to fill the job posting and emphasis from your "
+        "analysed, annotated list under Job posts. Overrides the two boxes below.",
+    ),
+    Field(
         "job_posting",
         "Job posting",
         widget="textarea",
-        required=True,
-        help="The full posting text — title, company, responsibilities, requirements.",
+        help="The full posting text — title, company, responsibilities, requirements. "
+        "Required unless you load a saved job post above.",
     ),
     Field(
         "cv",
@@ -78,7 +86,9 @@ FIELDS = (
         "emphasis",
         "Points to emphasise",
         widget="lines",
-        help="Optional. One point per line, most important first.",
+        help="Optional. One point per line, most important first. A saved job "
+        'post fills this with an analysed list — "> " lines quote the posting, '
+        '"- " lines are your own notes.',
     ),
     Field(
         "background_document_ids",
@@ -138,14 +148,27 @@ EXAMPLE_OUTPUT = Output(
 
 def build_input(form) -> Input:
     r = FormReader(form)
-    job_posting = r.text("job_posting", "Job posting", required=True)
+    # `job_post_id` is a key into the app's own Job posts store (like
+    # `background_document_ids`), not a contract argument. When set it fills
+    # `job_posting` and `emphasis` from the analysed, annotated posting.
+    job_post_id = r.text("job_post_id", "Saved job post")
+    job_post = _jobs.get_job_post(job_post_id) if job_post_id else None
+    if job_post is not None:
+        job_posting = job_post.posting
+        emphasis_source = job_post.emphasis
+    else:
+        job_posting = r.text("job_posting", "Job posting", required=True)
+        emphasis_source = form.get("emphasis") or ""
     cv = r.text("cv", "Current CV", required=True)
     job_title = r.text("job_title", "Role title")
     job_company = r.text("job_company", "Company")
     tone = r.text("tone", "Tone")
     target_length = r.text("target_length", "Target length")
     region = r.text("region", "Region")
-    emphasis = [Emphasis(point=point) for point in r.lines("emphasis")]
+    emphasis = [
+        Emphasis(point=p.point, quote=p.quote)
+        for p in parse_annotated_emphasis(emphasis_source)
+    ]
     # `background_document_ids` are keys into the app's own Background documents
     # store; resolve them to text and fold into the contract's `background_documents`.
     saved = _documents.get_documents(r.multi("background_document_ids"))

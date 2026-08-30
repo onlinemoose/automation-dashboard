@@ -199,6 +199,14 @@ inside a capability. If the chain gets long or is reused, that's the
 signal to move it into an orchestration project and have this page
 trigger the flow instead.
 
+A chain with a person in the middle stays here regardless of length. The
+Job posts area (`docs/JOB_POSTS.md`) is one: `job-post-analyst` turns a
+posting into a prioritised emphasis list, the user annotates each point,
+then `cover-letter-writer` / `cv-writer` consume the result. Because a
+human step sits between the two `run()`s it can't be a headless flow —
+it's an app-owned store (`_jobs.py`) plus a `"picker"` field, not a
+Prefect pipeline.
+
 ## Upgrading a capability
 
 A capability releasing a new tag changes nothing here until you move the

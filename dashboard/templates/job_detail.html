@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} — Job post — Automation Dashboard{% endblock %}
+{% block main %}
+<section class="panel">
+  <p class="crumb"><a href="/jobs">&larr; Job posts</a></p>
+  <h1>{{ job.title }}</h1>
+
+  {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
+
+  {% if summary %}
+  <div class="markdown">{{ summary | markdown }}</div>
+  {% endif %}
+
+  {% if meta %}
+  <footer class="runmeta">
+    <span class="runmeta__cost">{{ meta.cost_usd | usd4 }} <span class="runmeta__est">est.</span></span>
+    <span class="runmeta__tokens">
+      {{ meta.input_tokens | thousands }} in ·
+      {{ meta.output_tokens | thousands }} out ·
+      {{ meta.cache_write_input_tokens | thousands }} cache-write ·
+      {{ meta.cache_read_input_tokens | thousands }} cache-read
+    </span>
+    <span class="runmeta__src">{{ meta.capability }} {{ meta.capability_version }}</span>
+  </footer>
+  {% endif %}
+
+  <h2>Analyse</h2>
+  <p class="help">
+    Sends the posting below for analysis and fills the emphasis list with the
+    10–15 requirements the hiring manager is most likely weighing, each anchored
+    to the span of the posting it comes from. It replaces whatever is in the
+    emphasis box, so analyse first, then annotate.
+  </p>
+  <form method="post" action="/jobs/{{ job.id }}/analyse"
+        {% if job.emphasis.strip() %}onsubmit="return confirm('Replace the emphasis list with a fresh analysis? Your notes will be lost.')"{% endif %}>
+    <button type="submit">{% if job.emphasis.strip() %}Re-analyse posting{% else %}Analyse posting{% endif %}</button>
+  </form>
+
+  <h2>Posting &amp; emphasis</h2>
+  <form method="post" action="/jobs/{{ job.id }}">
+    <div class="field{% if 'title' in errors %} field--error{% endif %}">
+      <label for="title">Title <span class="req" title="required">*</span></label>
+      <input type="text" id="title" name="title" value="{{ values.get('title', job.title) }}" required>
+      {% if 'title' in errors %}<p class="error">{{ errors['title'] }}</p>{% endif %}
+    </div>
+    <div class="field{% if 'posting' in errors %} field--error{% endif %}">
+      <label for="posting">Job posting <span class="req" title="required">*</span></label>
+      <textarea id="posting" name="posting" rows="14" required>{{ values.get('posting', job.posting) }}</textarea>
+      {% if 'posting' in errors %}<p class="error">{{ errors['posting'] }}</p>{% endif %}
+    </div>
+    <div class="field">
+      <label for="emphasis">Emphasis</label>
+      <p class="help">
+        One requirement per block, blank line between. Lines starting with
+        <code>&gt;</code> are the quoted span from the posting; add your own
+        comment on a line starting with <code>-</code> — where the point
+        resonates with your experience, or where it's a gap.
+      </p>
+      <textarea id="emphasis" name="emphasis" rows="18"
+                placeholder="Lead with evidence you can do the core job&#10;&gt; the exact requirement text from the posting&#10;- I did exactly this at Acme in 2023 — strong match">{{ values.get('emphasis', job.emphasis) }}</textarea>
+    </div>
+    <button type="submit">Save</button>
+  </form>
+</section>
+{% endblock %}

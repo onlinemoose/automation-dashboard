@@ -25,6 +25,8 @@ from dataclasses import dataclass
 #   "lines"     - multi-line box; each non-blank line is one list item
 #   "checklist" - one checkbox per saved Background document; the submitted
 #                 value is a list of document ids (read with FormReader.multi)
+#   "picker"    - a <select> of saved Job posts; the submitted value is one
+#                 job-post id (read with FormReader.text). "" means none.
 Widget = str
 
 

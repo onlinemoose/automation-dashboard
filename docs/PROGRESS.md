@@ -3,6 +3,50 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-30 — Job posts area + analyse → annotate → writer workflow
+
+Branch `job-post-analysis`. Experiment: add a posting once, analyse it into
+a prioritised emphasis list, annotate each point, then load it into the
+Cover Letter and CV pages. Written up in `docs/JOB_POSTS.md`.
+
+- **New app-native area, not a capability page:** `/jobs` CRUD +
+  `/jobs/{id}/analyse`. `ALLOWED_ROUTES` in `tests/test_guardrails.py`
+  widened (same category as `/documents`). `dashboard/_jobs.py` — the
+  app's own store, `job_posts` Supabase table with the in-memory fallback
+  pattern; `templates/jobs.html`, `job_form.html`, `job_detail.html`;
+  `base.html` nav link.
+- **The analysis is a capability, not orchestration.** Reading a posting
+  and ranking its requirements is LLM domain logic → its own repo,
+  `job-post-analyst`, pinned like `cover-letter-writer`. Not a Prefect
+  flow: two capabilities with a human annotation step between them, so the
+  composition stays in the experience layer at an allowed seam. **That
+  repo isn't built yet** — `dashboard/_job_analysis.analyse()` returns a
+  fixed placeholder list; `docs/JOB_POSTS.md` has the contract to build
+  against and the swap-in point.
+- **Emphasis format** carries the analysis + the user's notes as text: a
+  plain line = the requirement, a `> ` line = the quoted span from the
+  posting (→ `Emphasis.quote`), a `- ` line = the candidate's note.
+  `parse_annotated_emphasis()` in `_job_analysis.py`. **v1 folds the note
+  into `Emphasis.point`** (`"…\n\nCandidate note: …"`) — no
+  `cover-letter-writer` contract change. A marker-free block is still one
+  point per line, so hand-typed lists are unaffected.
+- **New `"picker"` widget** (single-select `<select>` of saved job posts),
+  fed a `jobs` context var like `checklist` gets `documents`. On
+  `cover_letter_writer.py` / `cv_writer.py`: a `job_post_id` field (a
+  second `Field.name` that isn't a contract arg, like
+  `background_document_ids`). `build_input` loads `job_posting` +
+  `emphasis` from the store when it's set, else the two textareas as
+  before; `job_posting` is no longer HTML-`required` (enforced in
+  `build_input` unless a job post is picked).
+- `tests/test_jobs.py` added; `uv run pytest` → 50 passed;
+  `uv run lint-imports` clean.
+- **Operator setup pending:** `create table job_posts …` in the existing
+  Supabase project (DDL in `docs/JOB_POSTS.md`).
+- **Follow-ups:** build + pin `job-post-analyst` and replace the
+  placeholder; wire its real `Cost` into the analyse-page cost footer;
+  later, a `candidate_note` field on `Emphasis` to stop folding the note
+  into `point`; a nicer per-point annotation UI than one textarea.
+
 ## 2026-08-30 — Background documents area (Supabase)
 
 - New app-native area, not a capability page: `/documents` CRUD for

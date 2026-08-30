@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Job posts — Automation Dashboard{% endblock %}
+{% block main %}
+<section class="panel">
+  <p class="crumb"><a href="/">&larr; All capabilities</a></p>
+  <h1>Job posts</h1>
+  <p class="lede">
+    Add a posting once, analyse it into a prioritised list of what the hiring
+    manager is really weighing, annotate each point with where you're strong or
+    exposed, then load it into the Cover Letter and CV pages.
+  </p>
+
+  <p class="toolbar"><a class="button" href="/jobs/new">New job post</a></p>
+
+  {% if jobs %}
+  <ul class="pagelist pagelist--rows">
+    {% for job in jobs %}
+    <li>
+      <div class="pagelist__body">
+        <a href="/jobs/{{ job.id }}"><span class="pagelist__title">{{ job.title }}</span></a>
+        <p class="pagelist__summary">
+          {{ job.posting[:160] }}{% if job.posting|length > 160 %}…{% endif %}
+          {% if job.emphasis.strip() %}<br><small>Analysed — {{ job.emphasis.strip().splitlines()|length }} lines of emphasis.</small>{% else %}<br><small>Not analysed yet.</small>{% endif %}
+        </p>
+      </div>
+      <form method="post" action="/jobs/{{ job.id }}/delete"
+            onsubmit="return confirm('Delete “{{ job.title }}”?')">
+        <button type="submit" class="button button--ghost button--danger">Delete</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="hint">No job posts yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

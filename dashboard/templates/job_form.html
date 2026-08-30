@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}New job post — Automation Dashboard{% endblock %}
+{% block main %}
+<section class="panel">
+  <p class="crumb"><a href="/jobs">&larr; Job posts</a></p>
+  <h1>New job post</h1>
+
+  {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
+
+  <form method="post" action="/jobs/new">
+    <div class="field{% if 'title' in errors %} field--error{% endif %}">
+      <label for="title">Title <span class="req" title="required">*</span></label>
+      <p class="help">A label for your list, e.g. "Acme — Product Lead".</p>
+      <input type="text" id="title" name="title" value="{{ values.get('title', '') }}" required>
+      {% if 'title' in errors %}<p class="error">{{ errors['title'] }}</p>{% endif %}
+    </div>
+    <div class="field{% if 'posting' in errors %} field--error{% endif %}">
+      <label for="posting">Job posting <span class="req" title="required">*</span></label>
+      <p class="help">The full posting text — title, company, responsibilities, requirements.</p>
+      <textarea id="posting" name="posting" rows="18" required>{{ values.get('posting', '') }}</textarea>
+      {% if 'posting' in errors %}<p class="error">{{ errors['posting'] }}</p>{% endif %}
+    </div>
+    <button type="submit">Save &amp; open</button>
+  </form>
+</section>
+{% endblock %}
