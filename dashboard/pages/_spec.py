@@ -54,6 +54,25 @@ class Section:
     markdown: str
 
 
+@dataclass(frozen=True)
+class RunMeta:
+    """What one `run()` cost, pulled from the capability's `Output`.
+
+    Rendered as a small footer on the result page and — later — written to
+    the app's own usage store so spend can be totalled across runs. It is a
+    *usage* record, not a content archive: numbers plus which capability
+    (and pinned version) produced them, nothing else.
+    """
+
+    capability: str  # the capability's distribution name, e.g. "cover-letter-writer"
+    capability_version: str  # the pinned tag, e.g. "v0.10.0"
+    cost_usd: float  # the capability's own estimate
+    input_tokens: int
+    output_tokens: int  # includes the model's thinking tokens
+    cache_read_input_tokens: int
+    cache_write_input_tokens: int
+
+
 @dataclass
 class Page:
     slug: str
@@ -65,6 +84,9 @@ class Page:
     build_input: Callable[[Mapping[str, str]], object]
     run: Callable[[object], object]
     sections: Callable[[object], list[Section]]
+    # Optional: map the capability's `Output` to a `RunMeta` for the cost
+    # footer. Pages whose capability reports no cost leave this `None`.
+    run_meta: Callable[[object], RunMeta] | None = None
 
 
 class FormReader:

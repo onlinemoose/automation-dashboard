@@ -80,6 +80,15 @@ button:hover, .button:hover { filter: brightness(1.05); }
   white-space: nowrap;
 }
 .button--ghost:hover { filter: none; background: var(--bg); }
+.runmeta {
+  margin: 2rem 0 0; padding: 0.9rem 0 0; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 1rem;
+  font-size: 0.85rem; color: var(--ink-soft);
+}
+.runmeta__cost { font-weight: 600; color: var(--ink); }
+.runmeta__est { font-weight: 400; color: var(--ink-soft); }
+.runmeta__src { margin-left: auto; font-variant-numeric: tabular-nums; }
+
 .markdown :first-child { margin-top: 0; }
 .markdown pre {
   background: var(--panel); border: 1px solid var(--line);

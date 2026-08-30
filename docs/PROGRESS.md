@@ -3,6 +3,39 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-30 — Run cost on the result page (`run_meta`)
+
+- Bumped `cover-letter-writer` pin `v0.9.0` → `v0.10.0` (`[tool.uv.sources]`
+  + `uv.lock`). `v0.10.0` is purely additive: `Output.cost` and the
+  exported `Cost` shape (`usd`, `input_tokens`, `output_tokens`,
+  `cache_read_input_tokens`, `cache_write_input_tokens`). `Input`
+  unchanged; full `pytest` green after the bump.
+- `dashboard/pages/_spec.py`: new frozen `RunMeta` (capability,
+  capability_version, cost_usd, four token counts) + optional
+  `Page.run_meta: Callable[[Output], RunMeta] | None`. Second optional
+  page hook alongside `sections`.
+- `dashboard/pages/cover_letter_writer.py`: `CAPABILITY` /
+  `CAPABILITY_VERSION` constants (kept in step with the pin), `run_meta`
+  mapping `out.cost.*`, and `cost=Cost(...)` added to `EXAMPLE_OUTPUT` so
+  stub mode + the generic suite render the footer offline.
+- `app.py`: `page_submit` computes `meta = page.run_meta(output)` and
+  passes it to `result.html`; `thousands` / `usd4` Jinja filters.
+- `result.html` + `app.css`: a `.runmeta` footer under the sections —
+  `$0.0123 est.`, token caption (`1,024 in · 612 out · 1,500 cache-write
+  · 0 cache-read`), capability + tag. No download button. Always shown
+  when the page has `run_meta` (no toggle).
+- Tests: `test_pages.py` — generic, asserts the footer figures render for
+  any page with `run_meta`; `test_guardrails.py` — `run_meta` returns a
+  well-typed `RunMeta`.
+- **Deferred (next weeks):** persisting `RunMeta` to the app's own usage
+  store (SQLite first; `dashboard/_usage.py`, documented per rule 6), a
+  `/usage` page (app-native, not a capability page), and — later —
+  a pre-`run()` limit check (calls / spend per period) as the single
+  enforcement seam. `RunMeta` is already the row shape.
+- **Not touched:** downloads (the existing per-section `data:` URI already
+  survives reload; no server route, no run record needed for it),
+  PDF/DOCX rendering.
+
 ## 2026-08-29 — Post-deploy tidy-up
 
 - `.python-version` = `3.12` pinned (was relying on Render's default).

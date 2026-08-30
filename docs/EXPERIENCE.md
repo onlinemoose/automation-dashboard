@@ -24,6 +24,7 @@ dependencies, `run()` called directly — and nothing depends on it.
 | `build_input(form)` | turn the submitted form dict into the capability's `Input` (raise `FormError` for bad input) |
 | `run(input)` | the capability's `run` — the *only* call into it |
 | `sections(output)` | turn the `Output` into `Section(heading, markdown)` blocks |
+| `run_meta(output)` | *optional.* Map the `Output` to a `RunMeta` (cost + token counts) for the result-page cost footer. Leave unset if the capability reports no cost. |
 
 A `Field` has a `name` (must match the `Input` argument), a `label`, a
 `widget` (`text` / `textarea` / `number` / `lines`), `required`, and
@@ -33,6 +34,39 @@ list item — use it for `list[str]` inputs.
 `FormReader` (also in `_spec.py`) is a small helper for `build_input`: it
 reads fields, collects every problem, and raises one `FormError` with all
 of them so the form re-renders with each message next to its field.
+
+## Run cost — the `run_meta` hook
+
+A capability whose `Output` carries a cost (an LLM spend estimate plus
+token counts) can surface it on the result page. Give the page a
+`run_meta(output) -> RunMeta` that maps those fields across:
+
+```python
+from cover_letter_writer import Cost   # exported shape
+from dashboard.pages._spec import RunMeta
+
+CAPABILITY, CAPABILITY_VERSION = "cover-letter-writer", "v0.10.0"
+
+def run_meta(out) -> RunMeta:
+    c = out.cost
+    return RunMeta(
+        capability=CAPABILITY, capability_version=CAPABILITY_VERSION,
+        cost_usd=c.usd, input_tokens=c.input_tokens, output_tokens=c.output_tokens,
+        cache_read_input_tokens=c.cache_read_input_tokens,
+        cache_write_input_tokens=c.cache_write_input_tokens,
+    )
+```
+
+Wire it into `PAGE(..., run_meta=run_meta)`. The result template then
+renders a small footer: `$0.0123 est.` plus a token caption and the
+capability name + pinned tag. `example_output` must include a `cost` so
+stub mode and the generic tests can render the footer offline.
+
+`RunMeta` is a *usage* record, not a content archive — numbers plus which
+capability (and version) produced them. It is the shape a later usage
+store writes per run, so spend can be totalled across runs and, one day,
+capped. Keep the `CAPABILITY_VERSION` constant in step with the pin in
+`pyproject.toml`.
 
 ## Adding a page
 

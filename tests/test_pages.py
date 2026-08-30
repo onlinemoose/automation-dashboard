@@ -82,6 +82,23 @@ def test_stub_mode_renders_example_output_without_calling_run(page, monkeypatch)
 
 
 @pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
+def test_result_shows_run_cost_when_the_page_reports_it(page, monkeypatch) -> None:
+    if page.run_meta is None:
+        pytest.skip("page's capability reports no cost")
+
+    monkeypatch.setattr(page, "run", lambda data: page.example_output)
+    client = TestClient(create_app(auth_disabled=True))
+    resp = client.post(f"/p/{page.slug}", data=dict(page.example_form))
+
+    assert resp.status_code == 200, resp.text
+    meta = page.run_meta(page.example_output)
+    assert f"${meta.cost_usd:.4f}" in resp.text
+    assert f"{meta.input_tokens:,} in" in resp.text
+    assert f"{meta.output_tokens:,} out" in resp.text
+    assert meta.capability in resp.text and meta.capability_version in resp.text
+
+
+@pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
 def test_result_offers_a_markdown_download_per_section(page, monkeypatch) -> None:
     monkeypatch.setattr(page, "run", lambda data: page.example_output)
     client = TestClient(create_app(auth_disabled=True))

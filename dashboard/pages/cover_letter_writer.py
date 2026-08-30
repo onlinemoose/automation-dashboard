@@ -1,4 +1,4 @@
-"""Page for the `cover-letter-writer` capability (pinned at v0.9.0).
+"""Page for the `cover-letter-writer` capability (pinned at v0.10.0).
 
 Maps the capability's contract to a form. Optional contract inputs that
 aren't exposed yet: `previous_draft` / `previous_feedback` (the revision
@@ -10,9 +10,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cover_letter_writer import Emphasis, Input, Output, run
+from cover_letter_writer import Cost, Emphasis, Input, Output, run
 
-from dashboard.pages._spec import Field, FormReader, Page, Section
+from dashboard.pages._spec import Field, FormReader, Page, RunMeta, Section
+
+# The pinned tag, kept in step with `[tool.uv.sources]` in pyproject.toml.
+# Stamped onto every RunMeta so usage records say which build produced them.
+CAPABILITY = "cover-letter-writer"
+CAPABILITY_VERSION = "v0.10.0"
 
 # Demo inputs, vendored into this repo (a neutralised, shortened real
 # posting + a matching fictional CV). They belong to the page, not the
@@ -110,6 +115,13 @@ EXAMPLE_OUTPUT = Output(
         "- **Grow a small team** — 4 to 11, including hiring PMs and setting process.\n"
         "- **Not covered by the CV:** direct pricing / P&L advisory to C-level.\n"
     ),
+    cost=Cost(
+        usd=0.0123,
+        input_tokens=1024,
+        output_tokens=612,
+        cache_read_input_tokens=0,
+        cache_write_input_tokens=1500,
+    ),
 )
 
 
@@ -147,6 +159,19 @@ def sections(output: Output) -> list[Section]:
     ]
 
 
+def run_meta(output: Output) -> RunMeta:
+    cost = output.cost
+    return RunMeta(
+        capability=CAPABILITY,
+        capability_version=CAPABILITY_VERSION,
+        cost_usd=cost.usd,
+        input_tokens=cost.input_tokens,
+        output_tokens=cost.output_tokens,
+        cache_read_input_tokens=cost.cache_read_input_tokens,
+        cache_write_input_tokens=cost.cache_write_input_tokens,
+    )
+
+
 PAGE = Page(
     slug="cover-letter-writer",
     title="Cover Letter Writer",
@@ -157,4 +182,5 @@ PAGE = Page(
     build_input=build_input,
     run=run,
     sections=sections,
+    run_meta=run_meta,
 )

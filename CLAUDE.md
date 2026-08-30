@@ -81,7 +81,7 @@ dashboard/
   _render.py           capability Markdown output -> HTML
   hashpw.py            `python -m dashboard.hashpw` -> a password hash for .env
   pages/
-    _spec.py           Page, Field, Section, FormReader, FormError — the page contract
+    _spec.py           Page, Field, Section, RunMeta, FormReader, FormError — the page contract
     __init__.py        PAGES registry
     cover_letter_writer.py   page for the cover-letter-writer capability
   templates/           base, login, index, page (generic form), result

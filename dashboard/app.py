@@ -56,6 +56,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
 
     templates = Jinja2Templates(directory=str(_TEMPLATES))
     templates.env.filters["markdown"] = to_html
+    templates.env.filters["thousands"] = lambda n: f"{int(n):,}"
+    templates.env.filters["usd4"] = lambda n: f"${float(n):.4f}"
     templates.env.globals["stub_runs"] = app.state.stub_runs
 
     def render(name: str, request: Request, /, status_code: int = 200, **ctx):
@@ -130,7 +132,11 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
             # to a worker thread so the event loop stays free to answer other
             # requests — including the platform health check.
             output = await run_in_threadpool(page.run, data)
-        return render("result.html", request, page=page, sections=page.sections(output))
+        meta = page.run_meta(output) if page.run_meta else None
+        return render(
+            "result.html", request,
+            page=page, sections=page.sections(output), meta=meta,
+        )
 
     return app
 

@@ -14,6 +14,20 @@
     <div class="markdown">{{ section.markdown | markdown }}</div>
   </article>
   {% endfor %}
+
+  {% if meta %}
+  <footer class="runmeta">
+    <span class="runmeta__cost">{{ meta.cost_usd | usd4 }} <span class="runmeta__est">est.</span></span>
+    <span class="runmeta__tokens">
+      {{ meta.input_tokens | thousands }} in ·
+      {{ meta.output_tokens | thousands }} out ·
+      {{ meta.cache_write_input_tokens | thousands }} cache-write ·
+      {{ meta.cache_read_input_tokens | thousands }} cache-read
+    </span>
+    <span class="runmeta__src">{{ meta.capability }} {{ meta.capability_version }}</span>
+  </footer>
+  {% endif %}
+
   <p><a class="button" href="/p/{{ page.slug }}">Run again</a></p>
 </section>
 {% endblock %}
