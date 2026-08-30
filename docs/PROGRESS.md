@@ -3,6 +3,18 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-30 — Bump `cover-letter-writer` to `v0.11.0`
+
+- Bumped `cover-letter-writer` pin `v0.10.0` → `v0.11.0`
+  (`[tool.uv.sources]` + `uv.lock`, `uv sync`). `v0.11.0` reworks the
+  capability's internal prompt files into five layers and splits
+  "style" (`house_style`) from "method" (`expert_guidance`). `Input` /
+  `Output` shapes are unchanged — only the docstrings for `house_style`
+  and `expert_guidance` changed, and neither field is exposed on the
+  page yet. Full `pytest` green after the bump.
+- `dashboard/pages/cover_letter_writer.py`: `CAPABILITY_VERSION` and the
+  module docstring updated to `v0.11.0`.
+
 ## 2026-08-30 — Run cost on the result page (`run_meta`)
 
 - Bumped `cover-letter-writer` pin `v0.9.0` → `v0.10.0` (`[tool.uv.sources]`

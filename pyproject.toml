@@ -43,4 +43,4 @@ packages = ["dashboard"]
 addopts = "-q"
 
 [tool.uv.sources]
-cover-letter-writer = { git = "https://github.com/onlinemoose/cover-letter-writer.git", rev = "v0.10.0" }
+cover-letter-writer = { git = "https://github.com/onlinemoose/cover-letter-writer.git", rev = "v0.11.0" }
