@@ -17,6 +17,7 @@ Set these in the process environment (not committed):
 | `SESSION_SECRET` | signs the login cookie; a long random string. `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `DASHBOARD_PASSWORD_HASH` | the login password, hashed. `uv run python -m dashboard.hashpw` |
 | `ANTHROPIC_API_KEY` | passed through to any capability that calls Claude |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` | backing store for the Background documents area (`docs/BACKGROUND_DOCUMENTS.md`). Unset → an in-memory fallback that does not survive a restart |
 | `DASHBOARD_HTTPS` | `1` in production — marks the session cookie `Secure` |
 | `DASHBOARD_HOST` / `DASHBOARD_PORT` | optional; default `127.0.0.1:8000` |
 
@@ -59,5 +60,8 @@ Restart=on-failure
 - Single-password auth suits one operator. For more than one person, or
   audit needs, replace the internals of `dashboard/_auth.py` with real
   accounts — no page code changes.
+- The Background documents store is the app's own (`dashboard/_documents.py`,
+  a Supabase table). It is the first piece of app-owned persistence; a
+  future usage store would sit beside it. See `docs/BACKGROUND_DOCUMENTS.md`.
 - Long LLM calls block the worker. With one operator that is fine; under
   real concurrency, run several uvicorn workers or add a job queue.

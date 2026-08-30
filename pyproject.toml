@@ -12,6 +12,8 @@ dependencies = [
     "python-multipart>=0.0.9",
     "itsdangerous>=2.2",
     "markdown>=3.7",
+    # Backing store for the app's own data (the Background documents area).
+    "supabase>=2.31.0",
     # Capability modules, one per page. Added with:
     #   uv add "<name> @ git+https://github.com/onlinemoose/<name>.git@vX.Y.Z"
     # which records the pin in [tool.uv.sources] below and the exact commit

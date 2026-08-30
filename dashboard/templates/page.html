@@ -23,6 +23,22 @@
       {% elif f.widget == "number" %}
         <input type="number" id="{{ f.name }}" name="{{ f.name }}"
                value="{{ values.get(f.name, "") }}" {% if f.required %}required{% endif %}>
+      {% elif f.widget == "checklist" %}
+        {% set selected = values.get(f.name, []) %}
+        <input type="hidden" name="{{ f.name }}" value="">
+        {% if documents %}
+        <ul class="checklist">
+          {% for doc in documents %}
+          <li><label>
+            <input type="checkbox" name="{{ f.name }}" value="{{ doc.id }}"
+                   {% if doc.id in selected %}checked{% endif %}>
+            {{ doc.title }}
+          </label></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="help">No saved documents yet — <a href="/documents">add one</a>.</p>
+        {% endif %}
       {% else %}
         <textarea id="{{ f.name }}" name="{{ f.name }}"
                   rows="{{ 10 if f.widget in ("textarea", "lines") else 3 }}"

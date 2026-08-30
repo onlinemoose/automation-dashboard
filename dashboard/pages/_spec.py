@@ -19,10 +19,12 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 # Widgets the generic form renderer knows how to draw.
-#   "text"     - single-line input
-#   "textarea" - multi-line box
-#   "number"   - single-line numeric input
-#   "lines"    - multi-line box; each non-blank line is one list item
+#   "text"      - single-line input
+#   "textarea"  - multi-line box
+#   "number"    - single-line numeric input
+#   "lines"     - multi-line box; each non-blank line is one list item
+#   "checklist" - one checkbox per saved Background document; the submitted
+#                 value is a list of document ids (read with FormReader.multi)
 Widget = str
 
 
@@ -118,6 +120,21 @@ class FormReader:
     def lines(self, name: str) -> list[str]:
         raw = self._form.get(name) or ""
         return [line.strip() for line in raw.splitlines() if line.strip()]
+
+    def multi(self, name: str) -> list[str]:
+        """Every submitted value for a repeated field (e.g. a "checklist").
+
+        Works whether the form is a multidict (`getlist`) or a plain dict
+        whose value is already a list or a scalar. Falsy entries are dropped.
+        Never errors, never required.
+        """
+        form = self._form
+        if hasattr(form, "getlist"):
+            values = form.getlist(name)
+        else:
+            value = form.get(name)
+            values = value if isinstance(value, list) else [value]
+        return [str(v).strip() for v in values if v and str(v).strip()]
 
     def done(self) -> None:
         if self._errors:

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from cover_letter_writer import Cost, Emphasis, Input, Output, run
 
+from dashboard import _documents
 from dashboard.pages._spec import Field, FormReader, Page, RunMeta, Section
 
 # The pinned tag, kept in step with `[tool.uv.sources]` in pyproject.toml.
@@ -66,11 +67,18 @@ FIELDS = (
         help="Optional. One point per line, most important first.",
     ),
     Field(
+        "background_document_ids",
+        "Saved background documents",
+        widget="checklist",
+        help="Optional. Tick any saved notes to include as background context for "
+        "this run. Manage them under Background documents.",
+    ),
+    Field(
         "background_documents",
         "Background notes",
         widget="textarea",
-        help="Optional. Portfolio notes, a bio, answers to application questions, "
-        "company-context notes — anything beyond the CV. Treated as one document.",
+        help="Optional. A one-off note for this run only — portfolio notes, a bio, "
+        "answers to application questions, company context. Treated as one document.",
     ),
     Field(
         "max_words",
@@ -133,6 +141,9 @@ def build_input(form) -> Input:
     job_company = r.text("job_company", "Company")
     tone = r.text("tone", "Tone")
     emphasis = [Emphasis(point=point) for point in r.lines("emphasis")]
+    # `background_document_ids` are keys into the app's own Background documents
+    # store; resolve them to text and fold into the contract's `background_documents`.
+    saved = _documents.get_documents(r.multi("background_document_ids"))
     background = r.text("background_documents", "Background notes")
     max_words = r.integer("max_words", "Max words")
     salary_expectation = r.integer("salary_expectation", "Salary expectation")
@@ -145,7 +156,10 @@ def build_input(form) -> Input:
         job_company=job_company,
         tone=tone,
         emphasis=emphasis,
-        background_documents=[background] if background else [],
+        background_documents=[
+            *(doc.body for doc in saved),
+            *([background] if background else []),
+        ],
         max_words=max_words,
         salary_expectation=salary_expectation,
         availability=availability,

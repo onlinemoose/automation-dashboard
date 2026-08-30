@@ -31,6 +31,7 @@ body {
 }
 .brand { font-weight: 600; text-decoration: none; color: var(--ink); }
 .topbar nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
+.topbar nav a + a { margin-left: 1rem; }
 .topbar nav a:hover { color: var(--ink); }
 main { padding: 2rem 1.25rem 4rem; }
 .stubbanner {
@@ -52,6 +53,11 @@ h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
 .pagelist__title { font-weight: 600; }
 .pagelist a { text-decoration: none; color: var(--accent); }
 .pagelist__summary { margin: 0.25rem 0 0; font-size: 0.95rem; }
+/* Two-column rows: title + summary on the left, an action button right. */
+.pagelist--rows li { display: flex; align-items: center; gap: 2rem; }
+.pagelist--rows .pagelist__body { flex: 1; min-width: 0; }
+.pagelist--rows form { margin: 0; flex: none; }
+.toolbar { margin: 1.25rem 0 0.5rem; }
 .field { margin: 1.25rem 0; }
 .field label { display: block; font-weight: 600; margin-bottom: 0.2rem; }
 .field .help { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--ink-soft); }
@@ -61,6 +67,10 @@ h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
   border: 1px solid var(--line); border-radius: var(--radius);
 }
 .field textarea { resize: vertical; }
+.checklist { list-style: none; padding: 0; margin: 0; }
+.checklist li { padding: 0.15rem 0; }
+.checklist label { display: flex; gap: 0.5rem; font-weight: 400; align-items: baseline; }
+.checklist input { width: auto; }
 .field--error input, .field--error textarea { border-color: var(--error); }
 .req { color: var(--error); }
 .error { color: var(--error); font-size: 0.9rem; margin: 0.3rem 0 0; }
@@ -80,6 +90,8 @@ button:hover, .button:hover { filter: brightness(1.05); }
   white-space: nowrap;
 }
 .button--ghost:hover { filter: none; background: var(--bg); }
+.button--danger { color: var(--error); border-color: var(--error); }
+.button--danger:hover { background: var(--bg); }
 .runmeta {
   margin: 2rem 0 0; padding: 0.9rem 0 0; border-top: 1px solid var(--line);
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 1rem;
