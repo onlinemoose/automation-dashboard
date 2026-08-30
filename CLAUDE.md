@@ -78,16 +78,18 @@ dashboard/
   app.py               FastAPI app: login, an index, and two generic routes
                        (GET/POST /p/{slug}) that drive every page from its Page spec
   _auth.py             single-password session login (scrypt hash in the env)
+  _documents.py        the app's own Background documents store (Supabase table)
   _render.py           capability Markdown output -> HTML
   hashpw.py            `python -m dashboard.hashpw` -> a password hash for .env
   pages/
     _spec.py           Page, Field, Section, RunMeta, FormReader, FormError — the page contract
     __init__.py        PAGES registry
     cover_letter_writer.py   page for the cover-letter-writer capability
-  templates/           base, login, index, page (generic form), result
+  templates/           base, login, index, page (generic form), result, documents
   static/app.css       plain, restyle to taste
 docs/
   EXPERIENCE.md        the rules in prose + "Adding a page" walk-through
+  BACKGROUND_DOCUMENTS.md   the app-owned Background documents store
   DEPLOY.md            serving it (uvicorn + reverse proxy, env, TLS)
   PROGRESS.md          dated log, newest first
 tests/

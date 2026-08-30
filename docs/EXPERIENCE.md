@@ -27,9 +27,15 @@ dependencies, `run()` called directly — and nothing depends on it.
 | `run_meta(output)` | *optional.* Map the `Output` to a `RunMeta` (cost + token counts) for the result-page cost footer. Leave unset if the capability reports no cost. |
 
 A `Field` has a `name` (must match the `Input` argument), a `label`, a
-`widget` (`text` / `textarea` / `number` / `lines`), `required`, and
-`help` text. `lines` is a textarea where each non-blank line becomes one
-list item — use it for `list[str]` inputs.
+`widget` (`text` / `textarea` / `number` / `lines` / `checklist`),
+`required`, and `help` text. `lines` is a textarea where each non-blank
+line becomes one list item — use it for `list[str]` inputs. `checklist`
+renders one checkbox per saved Background document and submits a list of
+ids; read it with `FormReader.multi(name)` and resolve the ids through
+`dashboard._documents` (see `docs/BACKGROUND_DOCUMENTS.md`). Its `name`
+is an app-storage key, so it's the one field whose name deliberately
+doesn't match an `Input` argument — `build_input` folds the resolved
+text into the real contract field.
 
 `FormReader` (also in `_spec.py`) is a small helper for `build_input`: it
 reads fields, collects every problem, and raises one `FormError` with all
@@ -172,6 +178,16 @@ It exercises everything the experience layer owns (the form,
 `build_input`, `sections()`, the result template) but *not* the
 capability call — that has its own tests. `tests/test_pages.py` asserts
 stub mode renders `example_output` without calling `run()`.
+
+## App-owned storage
+
+The dashboard holds no domain data, but it may keep its *own* — saved
+notes, run history, accounts (CLAUDE.md rule 6). The first of these is the
+**Background documents** area: `dashboard/_documents.py` (a Supabase
+table) plus the `/documents` routes in `app.py`. These routes are
+app-native — not a capability page, exempt in `test_guardrails.py`'s
+`ALLOWED_ROUTES` — and that's the pattern any later store (a `/usage`
+page, say) follows. Full write-up: `docs/BACKGROUND_DOCUMENTS.md`.
 
 ## Chaining capabilities
 

@@ -31,4 +31,8 @@ services:
         sync: false
       - key: GH_TOKEN                  # fetches the private cover-letter-writer repo during build
         sync: false
+      - key: SUPABASE_URL             # Background documents store — see docs/BACKGROUND_DOCUMENTS.md
+        sync: false
+      - key: SUPABASE_SERVICE_KEY     # service_role key; full access, server-side only
+        sync: false
     # Python version comes from .python-version (3.12).

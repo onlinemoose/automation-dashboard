@@ -12,6 +12,7 @@ from pathlib import Path
 
 from cv_writer import Cost, Emphasis, Input, Output, run
 
+from dashboard import _documents
 from dashboard.pages._spec import Field, FormReader, Page, RunMeta, Section
 
 # The pinned tag, kept in step with `[tool.uv.sources]` in pyproject.toml.
@@ -80,12 +81,19 @@ FIELDS = (
         help="Optional. One point per line, most important first.",
     ),
     Field(
+        "background_document_ids",
+        "Saved background documents",
+        widget="checklist",
+        help="Optional. Tick any saved notes to include as background context for "
+        "this run. Manage them under Background documents.",
+    ),
+    Field(
         "background_documents",
         "Background notes",
         widget="textarea",
-        help="Optional. Portfolio notes, project write-ups, a bio, older roles "
-        "left off the CV, company-context notes — anything beyond the CV. "
-        "Treated as one document.",
+        help="Optional. A one-off note for this run only — portfolio notes, project "
+        "write-ups, a bio, older roles left off the CV, company context. Treated "
+        "as one document.",
     ),
 )
 
@@ -138,6 +146,9 @@ def build_input(form) -> Input:
     target_length = r.text("target_length", "Target length")
     region = r.text("region", "Region")
     emphasis = [Emphasis(point=point) for point in r.lines("emphasis")]
+    # `background_document_ids` are keys into the app's own Background documents
+    # store; resolve them to text and fold into the contract's `background_documents`.
+    saved = _documents.get_documents(r.multi("background_document_ids"))
     background = r.text("background_documents", "Background notes")
     r.done()
     return Input(
@@ -149,7 +160,10 @@ def build_input(form) -> Input:
         target_length=target_length,
         region=region,
         emphasis=emphasis,
-        background_documents=[background] if background else [],
+        background_documents=[
+            *(doc.body for doc in saved),
+            *([background] if background else []),
+        ],
     )
 
 

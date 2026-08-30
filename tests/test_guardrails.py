@@ -17,7 +17,13 @@ APP_PY = DASHBOARD / "app.py"
 PAGES_DIR = DASHBOARD / "pages"
 # The only routes app.py is allowed to declare. Every capability rides the
 # two generic `/p/{slug}` routes — a new page is a `Page` spec, not a route.
-ALLOWED_ROUTES = {"/health", "/login", "/logout", "/", "/p/{slug}"}
+# The `/documents` set is app-native (the dashboard's own Background documents
+# store, CLAUDE.md rule 6), not per-capability — the same category as a future
+# `/usage` page.
+ALLOWED_ROUTES = {
+    "/health", "/login", "/logout", "/", "/p/{slug}",
+    "/documents", "/documents/new", "/documents/{doc_id}", "/documents/{doc_id}/delete",
+}
 ROUTE_DECORATORS = {"get", "post", "put", "patch", "delete", "head", "options", "route", "api_route"}
 
 

@@ -3,6 +3,39 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-30 — Background documents area (Supabase)
+
+- New app-native area, not a capability page: `/documents` CRUD for
+  reusable background notes (a bio, project write-ups, company context).
+  Written up in `docs/BACKGROUND_DOCUMENTS.md` (CLAUDE.md rule 6).
+- `dashboard/_documents.py`: the app's own store. `supabase-py` client
+  over a `background_documents` table when `SUPABASE_URL` /
+  `SUPABASE_SERVICE_KEY` are set; an in-memory fallback + `warnings.warn`
+  otherwise (same pattern as the ephemeral `SESSION_SECRET`), so local
+  dev and the tests run with no Supabase. `uv add supabase`.
+- `dashboard/app.py`: four app-native routes (`/documents`,
+  `/documents/new`, `/documents/{doc_id}`, `/documents/{doc_id}/delete`),
+  each `guard()`-gated. `ALLOWED_ROUTES` in `tests/test_guardrails.py`
+  widened to match, with a comment that these are app-native (rule 6),
+  not per-capability.
+- New `"checklist"` widget in `pages/_spec.py` + `FormReader.multi()`;
+  `page.html` renders it from a `documents` context var; `page_submit`
+  stops flattening the form and runs `build_input` in the threadpool
+  (it may hit the store).
+- `cover_letter_writer.py` / `cv_writer.py`: new `background_document_ids`
+  checklist field (unchecked by default). `build_input` resolves the
+  ticked ids to text and prepends them to the contract's
+  `background_documents`; the free-text "Background notes" box stays for
+  one-off notes.
+- `tests/test_documents.py` added; `uv run pytest` → 34 passed;
+  `uv run lint-imports` clean.
+- **Operator setup pending:** create the Supabase project + table, set
+  the two env vars locally and on Render. See
+  `docs/DEPLOYMENT_CHECKLIST.md`.
+- Deferred: per-tool scoping (every note is offered to both writer
+  pages); switching `_documents.py` to the async Supabase client if the
+  blocking calls ever matter.
+
 ## 2026-08-30 — New page: `cv-writer`
 
 - `uv add "cv-writer @ git+https://github.com/onlinemoose/cv-writer.git@v0.3.0"`

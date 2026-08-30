@@ -75,6 +75,31 @@ nothing else changes.
 
 ---
 
+## Background documents store — Supabase (code done, needs project + env)
+
+The first piece of app-owned persistence: `dashboard/_documents.py` backed
+by a Supabase Postgres table. Full write-up in
+`docs/BACKGROUND_DOCUMENTS.md`. Without the env vars the app runs on an
+in-memory fallback that does not survive a restart.
+
+- [ ] Create a Supabase project (free tier; region near the Render
+      region).
+- [ ] Run the `background_documents` table DDL from
+      `docs/BACKGROUND_DOCUMENTS.md` in the Supabase SQL editor. Leave RLS
+      on (the service key bypasses it; the browser never gets a key).
+- [ ] Render env vars (secret): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
+      (the `service_role` key). Set them **before** the deploy lands or
+      the first requests fall back to memory.
+- [ ] Smoke test: `/documents` → create a note → run a writer page with
+      it ticked.
+- [ ] Note the free-tier caveats: project pauses after ~7 days idle
+      (un-pause from the dashboard); minimal automatic backups — export or
+      move to Pro if the notes matter.
+
+This is the Supabase project **Phase 3 reuses** for real accounts.
+
+---
+
 ## Phase 2 — Multi-user auth (Option B, not built yet)
 
 A shared password ships fine for a handful of trusted people. When more
@@ -101,10 +126,9 @@ linked calendar). This replaces Phase 2, doesn't extend it.
 
 - [ ] Add `fastapi-users` + `sqlmodel` (or `sqlalchemy`) — a library, not
       a framework; the FastAPI app is untouched structurally.
-- [ ] Postgres: **Neon** or **Supabase** free tier (more generous and
-      longer-lived than Render's free Postgres) — just a connection
-      string in the env. Or SQLite on a Render persistent disk if we stay
-      single-instance.
+- [ ] Postgres: **Supabase** — already set up for the Background documents
+      store (see above), reuse that project. (Neon is the fallback if we
+      ever leave Supabase.)
 - [ ] "Sign in with Google" via Authlib (we'll be doing Google OAuth for
       any calendar feature anyway; reuse it for login).
 - [ ] `dashboard/_auth.py` is the swap point — page code doesn't change.
@@ -144,6 +168,8 @@ integrations, and Apple has no clean API path).
 | `DASHBOARD_PASSWORD_HASH` | `uv run python -m dashboard.hashpw` | dashboard (secret) |
 | `ANTHROPIC_API_KEY` | the real key | dashboard (secret) |
 | `GH_TOKEN` | fine-grained PAT, read-only Contents on the private capability repos | dashboard (secret) |
+| `SUPABASE_URL` | Supabase project URL (Background documents store) | dashboard (secret) |
+| `SUPABASE_SERVICE_KEY` | Supabase `service_role` key — full access, server-side only | dashboard (secret) |
 | `DASHBOARD_HTTPS` | `1` | `render.yaml` ok |
 | `DASHBOARD_STUB_RUNS` | unset, or `0` | — must not be `1` |
 | `PYTHON_VERSION` | `3.12` (or use `.python-version`) | `render.yaml` ok |
@@ -178,6 +204,10 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: GH_TOKEN                  # fetches private capability repos during build
+        sync: false
+      - key: SUPABASE_URL             # Background documents store
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
         sync: false
 ```
 

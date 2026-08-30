@@ -1,6 +1,10 @@
 """The FastAPI app: login, an index of pages, and two generic routes
 (`GET`/`POST /p/{slug}`) that drive every capability page from its `Page`
 spec. Adding a capability is adding a `Page` — never a route here.
+
+The `/documents` routes are the one exception: an app-native area for the
+dashboard's own Background documents store (CLAUDE.md rule 6), not tied to
+any capability. See `docs/BACKGROUND_DOCUMENTS.md`.
 """
 
 from __future__ import annotations
@@ -18,14 +22,32 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
+from dashboard import _documents
 from dashboard._auth import is_authed, password_hash, verify_password
 from dashboard._render import to_html
 from dashboard.pages import PAGES, PAGES_BY_SLUG
-from dashboard.pages._spec import FormError
+from dashboard.pages._spec import FormError, Page
 
 _HERE = Path(__file__).resolve().parent
 _TEMPLATES = _HERE / "templates"
 _STATIC = _HERE / "static"
+
+
+def _wants_documents(page: Page) -> bool:
+    return any(f.widget == "checklist" for f in page.fields)
+
+
+def _form_values(raw, page: Page) -> dict[str, object]:
+    """The submitted form as the templates and `build_input` expect it:
+    "checklist" fields become a list of values, everything else a string."""
+    checklist = {f.name for f in page.fields if f.widget == "checklist"}
+    values: dict[str, object] = {}
+    for key in set(raw.keys()):
+        if key in checklist:
+            values[key] = [v for v in raw.getlist(key) if v]
+        else:
+            values[key] = str(raw.get(key))
+    return values
 
 
 def _session_secret() -> str:
@@ -100,15 +122,21 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
             return redirect
         return render("index.html", request, pages=PAGES)
 
+    async def _doc_choices(page: Page) -> list:
+        return await run_in_threadpool(_documents.list_documents) if _wants_documents(page) else []
+
     @app.get("/p/{slug}", response_class=HTMLResponse)
-    def page_form(request: Request, slug: str):
+    async def page_form(request: Request, slug: str):
         if (redirect := guard(request)) is not None:
             return redirect
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
         prefill = dict(page.example_form) if request.query_params.get("example") else {}
-        return render("page.html", request, page=page, values=prefill, errors={})
+        return render(
+            "page.html", request,
+            page=page, values=prefill, errors={}, documents=await _doc_choices(page),
+        )
 
     @app.post("/p/{slug}", response_class=HTMLResponse)
     async def page_submit(request: Request, slug: str):
@@ -117,13 +145,16 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
-        form = {k: str(v) for k, v in (await request.form()).items()}
+        form = _form_values(await request.form(), page)
         try:
-            data = page.build_input(form)
+            # `build_input` may hit the Background documents store to resolve a
+            # picked id — run it off the event loop like `run()` itself.
+            data = await run_in_threadpool(page.build_input, form)
         except FormError as exc:
             return render(
                 "page.html", request, status_code=422,
                 page=page, values=form, errors=exc.errors,
+                documents=await _doc_choices(page),
             )
         if app.state.stub_runs:
             output = page.example_output  # stub mode: no capability call
@@ -137,6 +168,77 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
             "result.html", request,
             page=page, sections=page.sections(output), meta=meta,
         )
+
+    # --- background documents -------------------------------------------
+    # The app's own store (CLAUDE.md rule 6), not a capability. Notes here
+    # feed the writer pages' `background_documents` input via a checklist.
+
+    @app.get("/documents", response_class=HTMLResponse)
+    async def documents_list(request: Request):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        docs = await run_in_threadpool(_documents.list_documents)
+        return render("documents.html", request, documents=docs)
+
+    @app.get("/documents/new", response_class=HTMLResponse)
+    def document_new(request: Request):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        return render("document_form.html", request, doc=None, values={}, errors={})
+
+    @app.post("/documents/new", response_class=HTMLResponse)
+    async def document_create(request: Request):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        form = await request.form()
+        title = str(form.get("title") or "").strip()
+        body = str(form.get("body") or "").strip()
+        if not title:
+            return render(
+                "document_form.html", request, status_code=422,
+                doc=None, values={"title": title, "body": body},
+                errors={"title": "Title is required."},
+            )
+        await run_in_threadpool(_documents.create_document, title, body)
+        return RedirectResponse("/documents", status_code=303)
+
+    @app.get("/documents/{doc_id}", response_class=HTMLResponse)
+    async def document_edit(request: Request, doc_id: str):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        doc = await run_in_threadpool(_documents.get_document, doc_id)
+        if doc is None:
+            raise HTTPException(status_code=404)
+        return render(
+            "document_form.html", request,
+            doc=doc, values={"title": doc.title, "body": doc.body}, errors={},
+        )
+
+    @app.post("/documents/{doc_id}", response_class=HTMLResponse)
+    async def document_update(request: Request, doc_id: str):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        form = await request.form()
+        title = str(form.get("title") or "").strip()
+        body = str(form.get("body") or "").strip()
+        if not title:
+            doc = await run_in_threadpool(_documents.get_document, doc_id)
+            return render(
+                "document_form.html", request, status_code=422,
+                doc=doc, values={"title": title, "body": body},
+                errors={"title": "Title is required."},
+            )
+        updated = await run_in_threadpool(_documents.update_document, doc_id, title, body)
+        if updated is None:
+            raise HTTPException(status_code=404)
+        return RedirectResponse("/documents", status_code=303)
+
+    @app.post("/documents/{doc_id}/delete", response_class=HTMLResponse)
+    async def document_delete(request: Request, doc_id: str):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        await run_in_threadpool(_documents.delete_document, doc_id)
+        return RedirectResponse("/documents", status_code=303)
 
     return app
 
