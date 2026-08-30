@@ -10,11 +10,12 @@ docs/EXPERIENCE.md has the full walk-through.
 
 from __future__ import annotations
 
-from dashboard.pages import cover_letter_writer
+from dashboard.pages import cover_letter_writer, cv_writer
 from dashboard.pages._spec import Page
 
 PAGES: list[Page] = [
     cover_letter_writer.PAGE,
+    cv_writer.PAGE,
 ]
 
 PAGES_BY_SLUG: dict[str, Page] = {page.slug: page for page in PAGES}

@@ -17,6 +17,7 @@ dependencies = [
     # which records the pin in [tool.uv.sources] below and the exact commit
     # in uv.lock.
     "cover-letter-writer",
+    "cv-writer",
 ]
 
 [dependency-groups]
@@ -44,3 +45,4 @@ addopts = "-q"
 
 [tool.uv.sources]
 cover-letter-writer = { git = "https://github.com/onlinemoose/cover-letter-writer.git", rev = "v0.11.0" }
+cv-writer = { git = "https://github.com/onlinemoose/cv-writer.git", rev = "v0.3.0" }

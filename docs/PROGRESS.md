@@ -3,6 +3,27 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-30 — New page: `cv-writer`
+
+- `uv add "cv-writer @ git+https://github.com/onlinemoose/cv-writer.git@v0.3.0"`
+  — pin recorded in `[tool.uv.sources]`, exact commit in `uv.lock`.
+  Same shape as `cover-letter-writer`: `run(Input) -> Output`, with
+  `Output.cost` (`Cost`) for the footer.
+- `dashboard/pages/cv_writer.py`: new `PAGE`. Fields map the contract's
+  candidate inputs — `job_posting` + `cv` (required), `job_title`,
+  `job_company`, `tone`, `target_length`, `region`, `emphasis` (one
+  point per line), `background_documents` (one doc). `sections()`
+  renders `tailored_cv` + `tailoring_note`; `run_meta()` maps
+  `out.cost.*`.
+- Deferred, same as the cover-letter page: `previous_draft` /
+  `previous_feedback` (revision loop needs the prior output carried
+  back) and the operator-config inputs `house_style` / `expert_guidance`.
+- `dashboard/pages/_examples/cv_writer/`: vendored demo inputs
+  (`job_posting.md`, `cv.md`, `emphasis.md`) — a neutralised posting and
+  a matching fictional CV, adapted from the capability's own examples.
+- Registered in `dashboard/pages/__init__.py`. Generic suite now covers
+  it: `uv run pytest` → 25 passed; `uv run lint-imports` clean.
+
 ## 2026-08-30 — Bump `cover-letter-writer` to `v0.11.0`
 
 - Bumped `cover-letter-writer` pin `v0.10.0` → `v0.11.0`
