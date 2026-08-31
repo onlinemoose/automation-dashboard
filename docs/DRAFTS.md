@@ -110,16 +110,22 @@ create table drafts (
   revisions    jsonb not null default '[]',
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
-  unique (slug, section, source_hash)
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  unique (user_id, slug, section, source_hash)
 );
+
+create index if not exists drafts_user_id_idx on drafts (user_id);
 
 grant all privileges on table drafts to service_role;
 alter table drafts enable row level security;
 ```
 
-- **One draft per `(slug, section, source_hash)`** — re-opening the same
-  result returns the same working draft (`create_or_get_draft`). The
-  `unique` constraint backs that.
+- **One draft per `(user_id, slug, section, source_hash)`** — re-opening the
+  same result returns the same working draft (`create_or_get_draft`), and
+  two users opening the same text get two independent drafts. The `unique`
+  constraint backs that. `create_or_get` scopes its lookup as well as
+  stamping the insert: miss the lookup half and the second user re-uses the
+  first's draft, revisions and all.
 - **`original` is immutable.** It's kept for "reset" and for showing how
   far the draft has drifted.
 - **Undo is replay.** Each `revisions` entry records the `span_start` /
@@ -144,6 +150,16 @@ draft), `selection`, `instruction`, and `kind`.
 
 ## Notes / limits
 
+- **Per-user scoped.** Every query filters on `user_id`, reads and writes
+  alike, and each public function takes the owning user's id as its last
+  required argument (`create_or_get_draft(slug, section, text, user_id)`,
+  `get_draft(draft_id, user_id)`,
+  `record_revision(draft_id, user_id, *, …)`,
+  `undo_last(draft_id, user_id)`). Every draft route already 404s on a
+  `None` fetch, so **another user's draft returns 404, not 403** — the
+  route can't distinguish "no such draft" from "not yours", and doesn't
+  try. See `USER_SCOPING.md` and
+  `migrations/2026-09-01_user_scoping.sql`.
 - **One edit in flight.** New selections are ignored while a proposal is
   open. No batch review, no multiple pending spans.
 - **Raw Markdown, not rendered.** The editor shows the draft as source in

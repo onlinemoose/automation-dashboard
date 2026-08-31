@@ -1,16 +1,5 @@
 # Per-user scoping — Supabase Auth + owned rows
 
-> **Status: DESIGN ONLY — not implemented on this branch.**
-> The `feat/supabase-auth-user-scoping` branch currently carries this
-> document and `migrations/2026-09-01_user_scoping.sql` and nothing else.
-> The code changes described below (Stages 1–5 of the plan) were **not**
-> written, because the test suite could not be run in the environment the
-> overnight agent had — see the 2026-09-01 entry in `PROGRESS.md`. The
-> database migration has already been applied by hand, so **the deployed
-> schema is ahead of this code**: the three tables have a `user_id
-> not null` column that the app does not yet write. Until the code lands,
-> inserts into those tables will fail.
-
 ## The problem
 
 The dashboard has no user identity. `dashboard/_auth.py` is a single
@@ -52,6 +41,40 @@ parameter of every backend method and every public function, with **no
 default** — so a missed call site is a loud `TypeError` at import or
 collection time rather than a silent cross-user leak.
 
+### The shipped signatures
+
+```python
+# dashboard/_documents.py
+list_documents(user_id)
+get_documents(ids, user_id)
+get_document(doc_id, user_id)
+create_document(title, body, user_id)
+update_document(doc_id, title, body, user_id)
+delete_document(doc_id, user_id)
+
+# dashboard/_jobs.py
+list_job_posts(user_id)
+get_job_post(job_id, user_id)
+create_job_post(title, posting, user_id)
+update_job_post(job_id, user_id, *, title=None, posting=None, emphasis=None)
+delete_job_post(job_id, user_id)
+
+# dashboard/_drafts.py
+create_or_get_draft(slug, section, text, user_id)
+get_draft(draft_id, user_id)
+record_revision(draft_id, user_id, *, instruction, selection, span_start,
+                span_len, revised, note="", cost=None)
+undo_last(draft_id, user_id)
+
+# dashboard/_auth.py
+sign_in(email, password) -> AuthedUser | None
+current_user(request)    -> AuthedUser | None   # AuthedUser(id, email)
+current_user_id(request) -> str | None
+```
+
+`update_job_post` and `record_revision` take `user_id` *before* the `*`,
+so the keyword-only arguments after it are unchanged.
+
 Scope **both the read and the write** in every method. The ones where a
 missing filter leaks across users:
 
@@ -66,6 +89,16 @@ missing filter leaks across users:
 
 Missing the SELECT filter in `_drafts.create_or_get` is the subtle one:
 user B would silently re-use user A's draft row.
+
+Each of these is covered by a test that was checked by mutation — the
+filter was removed, the test confirmed red, the filter restored. A
+route that fetches and 404s on `None` therefore returns **404, not 403**
+for another user's row; the routes don't distinguish "doesn't exist"
+from "not yours", and deliberately don't try.
+
+One trap worth recording: Jinja escapes `'` to `&#39;`, so an assertion
+that `"A's note" not in response.text` passes whether or not scoping
+works. Test fixtures use apostrophe-free titles.
 
 ### How `user_id` reaches a page
 

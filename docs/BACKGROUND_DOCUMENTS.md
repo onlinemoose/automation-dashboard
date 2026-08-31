@@ -35,8 +35,12 @@ create table background_documents (
   id         uuid primary key default gen_random_uuid(),
   title      text not null,
   body       text not null default '',
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  user_id    uuid not null references auth.users(id) on delete cascade
 );
+
+create index if not exists background_documents_user_id_idx
+  on background_documents (user_id);
 
 -- The app connects only as service_role (server-side). Grant that role;
 -- grant nothing to anon/authenticated, so the table is unreachable
@@ -88,7 +92,17 @@ matches an `Input` argument".
 
 ## Notes / limits
 
-- **No per-tool scoping.** Every saved document is offered to both writer
+- **Per-user scoped.** Every query filters on `user_id`, reads and writes
+  alike, and each public function takes the owning user's id as its last
+  required argument (`list_documents(user_id)`,
+  `get_documents(ids, user_id)`, `get_document(doc_id, user_id)`,
+  `create_document(title, body, user_id)`,
+  `update_document(doc_id, title, body, user_id)`,
+  `delete_document(doc_id, user_id)`). Another user's document is invisible:
+  absent from the list, `None` from `get`, a no-op to update or delete, and
+  a 404 over HTTP. See `USER_SCOPING.md` and
+  `migrations/2026-09-01_user_scoping.sql`.
+- **No per-tool scoping.** Every document you own is offered to both writer
   pages. A `tags` / `tools` column can be added later without migrating
   existing rows.
 - **Blocking client.** `supabase-py` is synchronous; every store call

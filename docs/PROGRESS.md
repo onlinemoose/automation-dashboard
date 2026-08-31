@@ -3,57 +3,71 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
-## 2026-09-01 — Supabase Auth + per-user scoping: STOPPED at Stage 0 (blocked)
+## 2026-09-01 — Supabase Auth + per-user data isolation
 
-Branch `feat/supabase-auth-user-scoping`. **Only Stage 0 (documentation)
-landed. No code was written. Stages 1–5 were not started.**
+Branch `feat/supabase-auth-user-scoping`. Real accounts via Supabase
+Auth, and every row in the app's three own stores scoped to the user who
+created it. 98 tests pass, `lint-imports` clean.
 
-Shipped in this entry: `docs/migrations/2026-09-01_user_scoping.sql` (the
-forward + rollback SQL for the `user_id` column, the per-user `drafts`
-uniqueness key, and the three indexes — already applied by hand in the
-Supabase SQL editor) and `docs/USER_SCOPING.md` (the design: applied
-scoping in the application layer, the `build_input(form, user_id)` seam,
-the `{"user": {"id", "email"}}` session shape, `SUPABASE_ANON_KEY`
-required in `.env`, RLS deferred, magic link deferred).
+**What shipped**
 
-**What blocked it.** The overnight run could not build the project's
-environment, so `uv run pytest` and `uv run lint-imports` could not be
-executed *at all* — not once, at any point. `uv sync` fails resolving two
-of the four pinned capability dependencies:
+- **Auth** (`dashboard/_auth.py`) — email + password against Supabase
+  Auth using the *anon* key. `AuthedUser(id, email)`, a backend protocol
+  with a Supabase and an offline implementation, `sign_in`,
+  `current_user`, `current_user_id`. The signed session cookie now holds
+  `{"user": {"id", "email"}}` and `is_authed` reads it. The scrypt
+  helpers stay, used only by the offline/dev login.
+- **Scoping** (`_documents.py`, `_jobs.py`, `_drafts.py`) — `user_id` is
+  the last required argument of every backend method and public
+  function, no default, so a missed call site is a `TypeError` at
+  collection time. Both the read and the write are filtered in each
+  method; the in-memory backends mirror the Supabase behaviour exactly.
+- **The page seam** — `build_input(form, user_id)`. App plumbing on the
+  seam that already carries `job_post_id` and `background_document_ids`;
+  the capability `Input` never sees it. No route added or removed.
 
-- `cover-letter-writer @ v0.13.0` — `git fetch` → `could not read
-  Username for 'https://github.com'`
-- `targeted-editor @ v0.1.0` — same
+**Before this deploys**
 
-`cv-writer` and `job-analyst` build fine, which rules out a general
-network or proxy fault: those two repos are public and the other two are
-private, and the cloud session's GitHub credential has no grant for them
-(`add_repo` for both, at read and at push: *"you don't have access"*).
-The checked-out `.venv` is empty, and there is no cached wheel or
-source-dist for either package anywhere on the box.
+1. **Run `docs/migrations/2026-09-01_user_scoping.sql`** in the Supabase
+   SQL editor if you have not already. It truncates the three tables,
+   adds `user_id`, swaps the `drafts` unique constraint for the
+   per-user one, and indexes `user_id`. It carries its own rollback,
+   which cannot restore truncated rows.
+2. **Add `SUPABASE_ANON_KEY` to `.env`** — required. Without it the app
+   silently falls back to the offline login. `DASHBOARD_DEV_EMAIL` is
+   optional and dev-only. Both are documented in `.env.example`.
+3. **Existing sessions invalidate once.** A cookie from before accounts
+   has `authed` but no `user`, so it reads as signed out — one redirect
+   to `/login`. Expected, no action.
+4. **Verify two-account isolation by hand** — sign in as each of two
+   Supabase accounts and confirm neither sees the other's documents, job
+   posts or drafts. The Supabase code paths were written by analogy to
+   the existing `_SupabaseBackend` methods and are the one part the test
+   suite cannot reach.
 
-Since the standing rule for this work is that **every commit leaves both
-`pytest` and `lint-imports` green**, and neither command can run, no code
-change could be made and verified. Writing Stages 1–5 unverified — a
-signature change threaded through three stores, both writer pages, and
-~20 route call sites — would have meant pushing several hundred lines
-that had never been imported once. Stopped instead, per the run's own
-stop rule. Stage 0 is documentation only and changes no code path, so the
-suite's state is identical to `main`'s; that commit could not be gated on
-a green run either, and is flagged here rather than claimed as verified.
+**Deferred**
 
-**⚠️ The schema is now ahead of the code.** The migration has been
-applied, so all three tables have `user_id uuid not null`. The app does
-not write it. **Inserts into `background_documents`, `job_posts` and
-`drafts` will fail until Stage 1–5 code lands** — creating a document, a
-job post, or opening a draft will error in production. Either finish the
-code or run the rollback SQL in the migration file.
+- **Magic link** — not implemented. Email + password ships first; the
+  magic-link flow needs interactive verification of the redirect URL.
+  See `docs/USER_SCOPING.md`.
+- **RLS policies keyed to `auth.uid()`** — future hardening, out of
+  scope. The `service_role` key bypasses them, so they add nothing until
+  the app stops using it. Scoping is enforced in the application layer.
 
-**To unblock:** grant the cloud session's GitHub identity read access to
-`onlinemoose/cover-letter-writer` and `onlinemoose/targeted-editor` (or
-run the work somewhere the existing pins resolve). Everything else about
-the plan is unchanged and ready to execute; the last verified state was
-72 tests passing on `main` at 7979b5d.
+**Notes**
+
+- Every scoping test was checked by mutation: the filter removed, the
+  test confirmed red, the filter restored. Worth keeping up — a scoping
+  test that cannot fail is worse than none.
+- Jinja escapes `'` to `&#39;`, so `assert "A's note" not in resp.text`
+  passes whether or not scoping works. Caught one such false pass;
+  fixtures now avoid apostrophes.
+- This work was first attempted by an unattended overnight run, which
+  stopped at Stage 0: two of the four pinned capability repos
+  (`cover-letter-writer`, `targeted-editor`) are private and the cloud
+  session had no GitHub grant for them, so `uv sync` failed and neither
+  `pytest` nor `lint-imports` could run. Resolved by installing the
+  Claude GitHub App for the `onlinemoose` account.
 
 ## 2026-08-31 — Live word count on the slow pages (cv-writer v0.5.0, cover-letter-writer v0.13.0)
 
