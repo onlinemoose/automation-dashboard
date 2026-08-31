@@ -3,6 +3,20 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-31 — Pin job-analyst and targeted-editor to git tags
+
+Both capabilities were local `[tool.uv.sources]` path overrides while
+their repos caught up. Now on GitHub:
+
+- `targeted-editor` — new private repo `onlinemoose/targeted-editor`,
+  pushed with tag `v0.1.0`.
+- `job-analyst` — the `recover-nested-tool-payload` fix (empty-result
+  bug above) is merged to its `main` and tagged `v0.1.0`.
+
+`pyproject.toml` now pins both with `{ git = "…", rev = "v0.1.0" }`
+alongside `cover-letter-writer` and `cv-writer`; `uv lock` records the
+commits. No path overrides left. 70 tests pass, `lint-imports` clean.
+
 ## 2026-08-31 — Job analyse: guard the empty-result case
 
 A German CPO posting analysed to nothing: the `job-analyst` model reply
