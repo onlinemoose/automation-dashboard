@@ -243,7 +243,7 @@ def test_picked_job_post_reaches_the_capability_input(monkeypatch) -> None:
 
     seen: dict[str, object] = {}
 
-    def fake_run(data):
+    def fake_run(data, **_):
         seen["data"] = data
         return cover_letter_writer.PAGE.example_output
 

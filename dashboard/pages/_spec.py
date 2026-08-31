@@ -98,6 +98,11 @@ class Page:
     # request. Quick pages (sub-minute) leave this False and get a plain
     # response. See docs/EXPERIENCE.md ("Slow pages").
     slow: bool = False
+    # Set when this page's capability `run()` accepts a keyword-only
+    # `on_progress` callback (a `Progress` value ~2x/sec while it streams).
+    # Only meaningful with `slow=True`: the streamed holding view then
+    # shows a live word count instead of a bare spinner.
+    progress: bool = False
 
 
 class FormReader:

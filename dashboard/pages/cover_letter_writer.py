@@ -1,4 +1,4 @@
-"""Page for the `cover-letter-writer` capability (pinned at v0.11.0).
+"""Page for the `cover-letter-writer` capability (pinned at v0.13.0).
 
 Maps the capability's contract to a form. Optional contract inputs that
 aren't exposed yet: `previous_draft` / `previous_feedback` (the revision
@@ -19,7 +19,7 @@ from dashboard.pages._spec import Field, FormReader, Page, RunMeta, Section
 # The pinned tag, kept in step with `[tool.uv.sources]` in pyproject.toml.
 # Stamped onto every RunMeta so usage records say which build produced them.
 CAPABILITY = "cover-letter-writer"
-CAPABILITY_VERSION = "v0.11.0"
+CAPABILITY_VERSION = "v0.13.0"
 
 # Demo inputs, vendored into this repo (a neutralised, shortened real
 # posting + a matching fictional CV). They belong to the page, not the
@@ -223,4 +223,7 @@ PAGE = Page(
     # One LLM call drafting a full letter plus a targeting note; long
     # postings and CVs push this past a minute.
     slow=True,
+    # cover-letter-writer's run() takes an on_progress callback (v0.13.0+)
+    # — the holding view shows a live word count.
+    progress=True,
 )

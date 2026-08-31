@@ -192,23 +192,51 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     def _streamed_result(request: Request, page: Page, data: object) -> StreamingResponse:
         """The result of a `slow=True` page, streamed.
 
-        Flush the holding view straight away, then a keepalive comment
-        every `_KEEPALIVE_SECONDS` while `run()` works in a worker thread,
-        then the real result markup plus a script that swaps it in. The
-        first byte lands in well under a second, so a hosting proxy's
-        time-to-first-byte / idle timeout can't kill a call that takes
-        minutes. Headers are already sent by the time `run()` could fail,
-        so a failure is rendered into the body, not as a 5xx.
+        Flush the holding view straight away, then — while `run()` works in
+        a worker thread — trickle out progress: a `window.__progress(...)`
+        script per update for a `progress=True` page (bridged from the
+        thread via `loop.call_soon_threadsafe`), or a bare keepalive
+        comment otherwise. Finish with the real result markup plus a
+        script that swaps it in. The first byte lands in well under a
+        second, so a hosting proxy's time-to-first-byte / idle timeout
+        can't kill a call that takes minutes. Headers are already sent by
+        the time `run()` could fail, so a failure is rendered into the
+        body, not as a 5xx.
         """
         tpl = templates.get_template
 
         async def body():
             yield tpl("_running_open.html").render(page=page)
-            task = asyncio.ensure_future(run_in_threadpool(page.run, data))
+
+            loop = asyncio.get_running_loop()
+            updates: asyncio.Queue[int] = asyncio.Queue()
+
+            def on_progress(p: object) -> None:  # called from the worker thread
+                loop.call_soon_threadsafe(updates.put_nowait, getattr(p, "words", 0))
+
+            def call() -> object:
+                if page.progress:
+                    return page.run(data, on_progress=on_progress)
+                return page.run(data)
+
+            task = asyncio.ensure_future(run_in_threadpool(call))
+
             while not task.done():
-                _, pending = await asyncio.wait({task}, timeout=_KEEPALIVE_SECONDS)
-                if pending:
-                    yield "<!-- working -->\n"
+                getter = asyncio.ensure_future(updates.get())
+                done, _ = await asyncio.wait(
+                    {getter, task}, timeout=_KEEPALIVE_SECONDS,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if getter in done:
+                    words = getter.result()
+                    while not updates.empty():  # coalesce a backlog, emit the latest
+                        words = updates.get_nowait()
+                    yield f"<script>window.__progress&&window.__progress({words})</script>\n"
+                else:
+                    getter.cancel()
+                    if task not in done:
+                        yield "<!-- working -->\n"
+
             try:
                 output = task.result()
             except Exception as exc:  # noqa: BLE001 - any run() failure, shown in the body

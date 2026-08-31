@@ -1,4 +1,4 @@
-"""Page for the `cv-writer` capability (pinned at v0.3.0).
+"""Page for the `cv-writer` capability (pinned at v0.5.0).
 
 Maps the capability's contract to a form. Optional contract inputs that
 aren't exposed yet: `previous_draft` / `previous_feedback` (the revision
@@ -19,7 +19,7 @@ from dashboard.pages._spec import Field, FormReader, Page, RunMeta, Section
 # The pinned tag, kept in step with `[tool.uv.sources]` in pyproject.toml.
 # Stamped onto every RunMeta so usage records say which build produced them.
 CAPABILITY = "cv-writer"
-CAPABILITY_VERSION = "v0.3.0"
+CAPABILITY_VERSION = "v0.5.0"
 
 # Demo inputs, vendored into this repo (a neutralised posting + a matching
 # fictional CV). They belong to the page, not the capability — the
@@ -224,4 +224,7 @@ PAGE = Page(
     # A tailored CV is a long-form document from one LLM call; a full-length
     # regional CV (e.g. a German Lebenslauf) can run for minutes.
     slow=True,
+    # cv-writer's run() takes an on_progress callback (v0.5.0+) — the
+    # holding view shows a live word count.
+    progress=True,
 )

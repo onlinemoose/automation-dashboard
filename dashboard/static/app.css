@@ -48,7 +48,8 @@ main { padding: 2rem 1.25rem 4rem; }
 .panel.narrow { max-width: 22rem; }
 
 /* Holding view while a slow page streams (see _running_open.html). */
-.working__msg { color: var(--ink-soft); max-width: 34rem; }
+.working__msg { margin-bottom: 0.35rem; font-variant-numeric: tabular-nums; }
+.working__hint { margin-top: 0; color: var(--ink-soft); max-width: 34rem; font-size: 0.9rem; }
 .working__spin {
   width: 1.25rem; height: 1.25rem; margin: 1.25rem 0 0.5rem;
   border: 2px solid var(--line); border-top-color: var(--accent);

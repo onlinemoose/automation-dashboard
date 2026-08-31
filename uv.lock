@@ -80,8 +80,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cover-letter-writer", git = "https://github.com/onlinemoose/cover-letter-writer.git?rev=v0.11.0" },
-    { name = "cv-writer", git = "https://github.com/onlinemoose/cv-writer.git?rev=v0.3.0" },
+    { name = "cover-letter-writer", git = "https://github.com/onlinemoose/cover-letter-writer.git?rev=v0.13.0" },
+    { name = "cv-writer", git = "https://github.com/onlinemoose/cv-writer.git?rev=v0.5.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "itsdangerous", specifier = ">=2.2" },
     { name = "jinja2", specifier = ">=3.1" },
@@ -216,8 +216,8 @@ wheels = [
 
 [[package]]
 name = "cover-letter-writer"
-version = "0.11.0"
-source = { git = "https://github.com/onlinemoose/cover-letter-writer.git?rev=v0.11.0#8be4560d84611f38c876f0a86715091d782e8fe8" }
+version = "0.13.0"
+source = { git = "https://github.com/onlinemoose/cover-letter-writer.git?rev=v0.13.0#b9e7d0536c710d7f0d78d1face8f9dfac42faf1b" }
 dependencies = [
     { name = "anthropic" },
 ]
@@ -274,8 +274,8 @@ wheels = [
 
 [[package]]
 name = "cv-writer"
-version = "0.3.0"
-source = { git = "https://github.com/onlinemoose/cv-writer.git?rev=v0.3.0#e3de53125107d3017d4f22cd5d05052122f5fea5" }
+version = "0.5.0"
+source = { git = "https://github.com/onlinemoose/cv-writer.git?rev=v0.5.0#59b726ebb5bc99e00e4b278f003aa1de7059263c" }
 dependencies = [
     { name = "anthropic" },
 ]

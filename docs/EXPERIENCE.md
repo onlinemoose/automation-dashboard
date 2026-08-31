@@ -249,9 +249,11 @@ Set `slow=True` on those pages' `Page`. The submit route then returns a
 `StreamingResponse` that:
 
 1. flushes a holding view (`templates/_running_open.html`) in the first
-   second — a spinner and "keep this tab open";
-2. drips an HTML-comment keepalive every `_KEEPALIVE_SECONDS` while
-   `run()` works in a worker thread, so the connection never idles out;
+   second — a spinner, an elapsed clock, and "keep this tab open";
+2. while `run()` works in a worker thread, trickles bytes so the
+   connection never idles out: a bare HTML-comment keepalive every
+   `_KEEPALIVE_SECONDS`, or — for a `progress=True` page — a
+   `window.__progress(words)` script per update (see below);
 3. streams the real result panel plus a one-line script that removes the
    placeholder (`_running_close.html`), or an in-body error notice if
    `run()` raised (`_running_error.html` — the `200` headers are already
@@ -261,3 +263,15 @@ Set `slow=True` on those pages' `Page`. The submit route then returns a
 quick pages, the streamed close reuses it verbatim. Stub mode ignores
 `slow` (there's no call to wait on). This is still not a job queue —
 it holds the one request open, cleanly, for the few minutes it needs.
+
+**Live progress (`progress=True`).** When the page's capability `run()`
+accepts a keyword-only `on_progress` callback (cv-writer ≥ v0.5.0,
+cover-letter-writer ≥ v0.13.0), also set `progress=True`. The submit
+route then passes a callback that bridges the worker thread to the
+response stream — `loop.call_soon_threadsafe(queue.put_nowait, …)` — and
+emits a `<script>window.__progress(<words>)</script>` chunk per update.
+The holding view's inline script shows `Thinking through the brief… 0:18`
+until the first word arrives, then `Writing… 640 words · 1:12` off its
+own 1-second clock (the server sends only the word count). No percentage:
+there's no honest denominator. If the capability has no `on_progress`,
+leave `progress` unset and the page falls back to the bare keepalive.

@@ -122,7 +122,7 @@ def test_ticked_documents_reach_the_capability_input(monkeypatch) -> None:
 
     seen: dict[str, object] = {}
 
-    def fake_run(data):
+    def fake_run(data, **_):
         seen["data"] = data
         return cover_letter_writer.PAGE.example_output
 

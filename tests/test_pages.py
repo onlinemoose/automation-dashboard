@@ -49,7 +49,7 @@ def test_example_form_fills_required_fields(page) -> None:
 def test_example_submission_runs_end_to_end(page, monkeypatch) -> None:
     seen: dict[str, object] = {}
 
-    def fake_run(data):
+    def fake_run(data, **_):  # a slow+progress page is called with on_progress=
         seen["data"] = data
         return page.example_output
 
@@ -67,8 +67,31 @@ def test_example_submission_runs_end_to_end(page, monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
+def test_progress_page_streams_word_count_updates(page, monkeypatch) -> None:
+    if not getattr(page, "progress", False):
+        pytest.skip("page does not report progress")
+
+    class _P:
+        words = 128
+
+    def fake_run(data, *, on_progress=None):
+        assert on_progress is not None, f"{page.slug}: on_progress not passed"
+        on_progress(_P())
+        return page.example_output
+
+    monkeypatch.setattr(page, "run", fake_run)
+    client = TestClient(create_app(auth_disabled=True))
+    resp = client.post(f"/p/{page.slug}", data=dict(page.example_form))
+
+    assert resp.status_code == 200, resp.text
+    assert "window.__progress(128)" in resp.text
+    for section in page.sections(page.example_output):
+        assert section.heading in resp.text
+
+
+@pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
 def test_stub_mode_renders_example_output_without_calling_run(page, monkeypatch) -> None:
-    def boom(data):
+    def boom(data, **_):
         raise AssertionError(f"{page.slug}: stub mode still called the capability")
 
     monkeypatch.setattr(page, "run", boom)
@@ -86,7 +109,7 @@ def test_result_shows_run_cost_when_the_page_reports_it(page, monkeypatch) -> No
     if page.run_meta is None:
         pytest.skip("page's capability reports no cost")
 
-    monkeypatch.setattr(page, "run", lambda data: page.example_output)
+    monkeypatch.setattr(page, "run", lambda data, **_: page.example_output)
     client = TestClient(create_app(auth_disabled=True))
     resp = client.post(f"/p/{page.slug}", data=dict(page.example_form))
 
@@ -100,7 +123,7 @@ def test_result_shows_run_cost_when_the_page_reports_it(page, monkeypatch) -> No
 
 @pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
 def test_result_offers_a_markdown_download_per_section(page, monkeypatch) -> None:
-    monkeypatch.setattr(page, "run", lambda data: page.example_output)
+    monkeypatch.setattr(page, "run", lambda data, **_: page.example_output)
     client = TestClient(create_app(auth_disabled=True))
     resp = client.post(f"/p/{page.slug}", data=dict(page.example_form))
 

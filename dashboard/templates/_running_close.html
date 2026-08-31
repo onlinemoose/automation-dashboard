@@ -4,6 +4,7 @@
     {% include "_result_panel.html" %}
     <script>
       (function () {
+        if (window.__stopProgress) window.__stopProgress();
         var w = document.getElementById("working");
         if (w) w.remove();
       })();

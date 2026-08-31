@@ -1,7 +1,9 @@
 {# First flush of a "slow page" submit. A complete document head + an open
    <main> holding a "working" panel, but deliberately NOT closed: the
-   route keeps the connection warm with keepalive comments, then streams
-   _running_close.html (or _running_error.html) to finish it. #}
+   route keeps the connection warm — with `window.__progress(words)`
+   script chunks for a progress page, bare keepalive comments otherwise —
+   then streams _running_close.html (or _running_error.html) to finish
+   it. #}
 <!doctype html>
 <html lang="en">
 <head>
@@ -20,6 +22,29 @@
       <p class="crumb"><a href="/p/{{ page.slug }}">&larr; {{ page.title }}</a></p>
       <h1>{{ page.title }}</h1>
       <p class="working__spin" aria-hidden="true"></p>
-      <p class="working__msg">Writing your document. This usually takes one to three
-        minutes for a long piece — keep this tab open, the result will appear here.</p>
+      <p class="working__msg" id="working-status">Starting…</p>
+      <p class="working__hint">This usually takes one to three minutes for a long piece —
+        keep this tab open, the result will appear here.</p>
     </section>
+    <script>
+      (function () {
+        var started = Date.now();
+        var words = 0;
+        var el = document.getElementById("working-status");
+        function clock(s) {
+          var m = Math.floor(s / 60), r = s % 60;
+          return m + ":" + (r < 10 ? "0" : "") + r;
+        }
+        function render() {
+          if (!el || !el.isConnected) return;
+          var secs = Math.floor((Date.now() - started) / 1000);
+          el.textContent = words > 0
+            ? "Writing… " + words.toLocaleString() + " words · " + clock(secs)
+            : "Thinking through the brief… " + clock(secs);
+        }
+        var timer = setInterval(render, 1000);
+        window.__progress = function (w) { if (w > words) words = w; render(); };
+        window.__stopProgress = function () { clearInterval(timer); };
+        render();
+      })();
+    </script>

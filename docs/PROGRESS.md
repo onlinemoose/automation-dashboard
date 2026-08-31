@@ -3,6 +3,42 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-31 — Live word count on the slow pages (cv-writer v0.5.0, cover-letter-writer v0.13.0)
+
+Both capabilities gained an optional keyword-only `on_progress` callback
+(`Progress(characters, words, seconds)`, ~2×/sec while the reply
+streams). Wired into the dashboard:
+
+- `Page.progress: bool` — set on `cv_writer` and `cover_letter_writer`
+  alongside `slow=True`.
+- `_streamed_result` now bridges the worker thread to the response
+  stream (`loop.call_soon_threadsafe` + an `asyncio.Queue`) and emits a
+  `<script>window.__progress(<words>)</script>` chunk per update,
+  coalescing any backlog. Non-progress slow pages keep the bare
+  keepalive.
+- `_running_open.html` shows an elapsed clock and, once words arrive,
+  `Writing… N words · M:SS`. `window.__stopProgress` is called from the
+  close/error templates.
+
+Verified under real uvicorn: holding view at ~1s, `__progress` chunks as
+the callback fires, result swapped in at completion. Pins → v0.5.0 /
+v0.13.0, `uv.lock` + `CAPABILITY_VERSION` + docstrings updated. Generic
+test suite covers the progress path per page. 72 tests pass,
+`lint-imports` clean.
+
+## 2026-08-31 — Bump cv-writer v0.4.0, cover-letter-writer v0.12.0
+
+Both capabilities now stream their model call internally
+(`messages.stream().get_final_message()`), cap output at `max_tokens=8_000`
+(was 16_000), set an explicit client `timeout=300s` + `max_retries=1`, and
+raise on a `max_tokens` stop instead of returning a truncated document.
+`run()`'s signature is unchanged — no page changes beyond the pins and
+`CAPABILITY_VERSION`. Paired with the streamed "slow page" response below,
+this is the fix for the CV Writer deploy-only timeout on long roles.
+
+`pyproject.toml` pins + `uv.lock` updated; `CAPABILITY_VERSION` and the
+page docstrings follow. 70 tests pass, `lint-imports` clean.
+
 ## 2026-08-31 — Slow pages: stream the result to beat the proxy timeout
 
 CV Writer (and Cover Letter Writer) timed out **only on the deployed
