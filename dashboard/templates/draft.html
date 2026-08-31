@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Editing draft — Automation Dashboard{% endblock %}
+{% block main %}
+<section class="panel draft"
+         data-draft-id="{{ draft.id }}"
+         data-capability="{{ capability }}"
+         data-capability-version="{{ capability_version }}">
+  <p class="crumb"><a href="/p/{{ draft.slug }}">&larr; {{ draft.slug }}</a></p>
+  <h1>Editing draft</h1>
+  <p class="lede">
+    Select any part of the text below, tell the editor what to change, and it
+    revises just that span — the rest of the draft is left alone. One edit at a
+    time: accept or reject a proposal before starting the next.
+  </p>
+
+  <div class="draft__toolbar">
+    <button type="button" id="draft-undo" {% if not draft.revisions %}disabled{% endif %}>Undo last</button>
+    <a class="button button--ghost" href="/drafts/{{ draft.id }}/download">Download .md</a>
+    <span class="draft__count" id="draft-count">
+      {{ draft.revisions | length }} revision{{ "" if draft.revisions | length == 1 else "s" }}
+    </span>
+  </div>
+
+  <pre class="draft__doc" id="draft-doc">{{ draft.current }}</pre>
+
+  <button type="button" class="draft__revise-btn" id="draft-revise-btn" hidden>Revise…</button>
+
+  <div class="draft__work" id="draft-work" hidden>
+    <h2 id="draft-work-title">Revise this span</h2>
+    <blockquote class="draft__selection" id="draft-selection"></blockquote>
+
+    <div id="draft-ask">
+      <label for="draft-instruction">What should change?</label>
+      <textarea id="draft-instruction" rows="3"
+                placeholder="e.g. make this more concrete · drop the second sentence · less breathless"></textarea>
+      <div class="draft__actions">
+        <button type="button" id="draft-propose">Propose revision</button>
+        <button type="button" class="button--ghost" id="draft-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <div id="draft-proposal" hidden>
+      <p class="draft__diff-label">Proposed change</p>
+      <p class="draft__diff" id="draft-diff"></p>
+      <p class="draft__note" id="draft-note"></p>
+      <div class="draft__actions">
+        <button type="button" id="draft-accept">Accept</button>
+        <button type="button" class="button--ghost" id="draft-retry">Retry</button>
+        <button type="button" class="button--ghost" id="draft-reject">Reject</button>
+      </div>
+      <footer class="runmeta" id="draft-runmeta" hidden>
+        <span class="runmeta__cost"><span id="draft-cost">$0.0000</span> <span class="runmeta__est">est.</span></span>
+        <span class="runmeta__tokens" id="draft-tokens"></span>
+        <span class="runmeta__src">{{ capability }} {{ capability_version }}</span>
+      </footer>
+    </div>
+
+    <p class="error" id="draft-error" hidden></p>
+    <p class="draft__busy" id="draft-busy" hidden>Revising… this can take up to a minute.</p>
+  </div>
+
+  {% if draft.revisions %}
+  <h2>History</h2>
+  <ol class="draft__history" id="draft-history">
+    {% for rev in draft.revisions %}
+    <li>
+      <span class="draft__history-instruction">{{ rev.instruction }}</span>
+      {% if rev.note %}<span class="draft__history-note">{{ rev.note }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+</section>
+<script src="/static/draft-edit.js"></script>
+{% endblock %}

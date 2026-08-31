@@ -21,6 +21,7 @@ dependencies = [
     "cover-letter-writer",
     "cv-writer",
     "job-analyst",
+    "targeted-editor",
 ]
 
 [dependency-groups]
@@ -53,3 +54,8 @@ cv-writer = { git = "https://github.com/onlinemoose/cv-writer.git", rev = "v0.3.
 # Swap for `{ git = "https://github.com/onlinemoose/job-analyst.git", rev = "vX.Y.Z" }`
 # once it cuts its first release.
 job-analyst = { path = "../job-analyst", editable = true }
+# targeted-editor: tagged v0.1.0 locally but not yet pushed — local path
+# override until the repo is on GitHub. Swap for
+# `{ git = "https://github.com/onlinemoose/targeted-editor.git", rev = "v0.1.0" }`
+# once it's pushed, then `uv lock` + a docs/PROGRESS.md entry.
+targeted-editor = { path = "../targeted-editor", editable = true }

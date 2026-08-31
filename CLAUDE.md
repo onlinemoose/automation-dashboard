@@ -79,17 +79,25 @@ dashboard/
                        (GET/POST /p/{slug}) that drive every page from its Page spec
   _auth.py             single-password session login (scrypt hash in the env)
   _documents.py        the app's own Background documents store (Supabase table)
+  _jobs.py             the app's own Job posts store (Supabase table)
+  _job_analysis.py     adapter for the job-analyst capability + emphasis format/parse
+  _drafts.py           the app's own Working drafts store + apply_revision / undo-by-replay
+  _targeted_edit.py    adapter for the targeted-editor capability (span revision)
   _render.py           capability Markdown output -> HTML
   hashpw.py            `python -m dashboard.hashpw` -> a password hash for .env
   pages/
     _spec.py           Page, Field, Section, RunMeta, FormReader, FormError — the page contract
     __init__.py        PAGES registry
     cover_letter_writer.py   page for the cover-letter-writer capability
-  templates/           base, login, index, page (generic form), result, documents
+  templates/           base, login, index, page (generic form), result, documents,
+                       jobs (job posts area), draft (span-revision editor)
   static/app.css       plain, restyle to taste
+  static/draft-edit.js select -> instruct -> diff -> accept, for the draft editor
 docs/
   EXPERIENCE.md        the rules in prose + "Adding a page" walk-through
   BACKGROUND_DOCUMENTS.md   the app-owned Background documents store
+  JOB_POSTS.md         the app-owned Job posts store + analyse step
+  DRAFTS.md            the app-owned Working drafts store + targeted revision
   DEPLOY.md            serving it (uvicorn + reverse proxy, env, TLS)
   PROGRESS.md          dated log, newest first
 tests/

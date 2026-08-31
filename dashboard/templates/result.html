@@ -7,6 +7,12 @@
   <article class="result">
     <div class="result__head">
       <h2>{{ section.heading }}</h2>
+      <form class="result__edit" method="post" action="/drafts">
+        <input type="hidden" name="slug" value="{{ page.slug }}">
+        <input type="hidden" name="section" value="{{ section.heading | lower | replace(' ', '-') }}">
+        <input type="hidden" name="text" value="{{ section.markdown }}">
+        <button type="submit" class="button button--ghost">Edit draft</button>
+      </form>
       <a class="button button--ghost"
          download="{{ page.slug }}-{{ section.heading | lower | replace(' ', '-') }}.md"
          href="data:text/markdown;charset=utf-8,{{ section.markdown | urlencode }}">Download .md</a>

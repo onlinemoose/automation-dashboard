@@ -189,6 +189,15 @@ app-native — not a capability page, exempt in `test_guardrails.py`'s
 `ALLOWED_ROUTES` — and that's the pattern any later store (a `/usage`
 page, say) follows. Full write-up: `docs/BACKGROUND_DOCUMENTS.md`.
 
+The **Job posts** area (`dashboard/_jobs.py`, `/jobs*`,
+`docs/JOB_POSTS.md`) and the **Working drafts** area (`dashboard/_drafts.py`,
+`/drafts*`, `docs/DRAFTS.md`) follow the same pattern. Working drafts is
+also where the app owns a little real logic: a result section can be
+opened as an editable draft, and `apply_revision()` splices an accepted
+span revision into the stored text (undo is replay from the immutable
+`original`). The revision itself is a capability call at an allowed seam —
+`targeted-editor`, invoked from the `/drafts/{id}/revise` handler.
+
 ## Chaining capabilities
 
 When a page needs two capabilities — e.g. extract text from an upload,

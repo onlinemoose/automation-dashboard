@@ -3,6 +3,53 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-31 — Targeted revision: edit one span of a result draft
+
+Branch `targeted-revision`. A capability result section can now be opened
+as an **editable draft**: select a span, give an instruction, and the new
+`targeted-editor` capability revises *that span only* — proposed as a
+diff, spliced in on accept, linear undo. Written up in `docs/DRAFTS.md`.
+
+- **New capability — `targeted-editor`** (`targeted_editor`), consumed
+  like `job-analyst`. Contract: `document` + `selection` + `instruction`
+  (+ optional `kind`) → `revised` (the span replacement only) + `note` +
+  `cost`. `pyproject.toml` pins it plus a `[tool.uv.sources]` **path**
+  override (`{ path = "../targeted-editor", editable = true }`) — the
+  repo is tagged `v0.1.0` locally but not yet pushed. Switch to a
+  `git … @v0.1.0` pin once it's on GitHub, then `uv lock` + an entry here.
+- **`dashboard/_drafts.py`** — the app's own store (Supabase table
+  `drafts` + in-memory fallback, same pattern as `_jobs.py`). One draft
+  per `(slug, section, source_hash)` via `create_or_get_draft`.
+  `apply_revision()` is the one piece of real text logic (a splice);
+  **undo is replay** — drop the last revision, recompute `current` from
+  `original` + what remains. `original` is never mutated.
+- **`dashboard/_targeted_edit.py`** — the capability adapter (thin,
+  modelled on `_job_analysis.py`): `revise()` calls
+  `targeted_editor.run(...)` and maps `Output` → this app's `Revision`.
+  `kind_for_section()` maps an Output-section slug to the capability's
+  `kind` steer. Needs `ANTHROPIC_API_KEY`.
+- **`dashboard/app.py`** — six app-native routes: `POST /drafts`
+  (open/create), `GET /drafts/{id}` (editor), `POST /drafts/{id}/revise`
+  (propose — **does not mutate**), `.../accept` (splice + record),
+  `.../undo`, `GET .../download`. Listed in `ALLOWED_ROUTES` as
+  app-native, the same category as `/jobs`. `/revise` honours
+  `DASHBOARD_STUB_RUNS` (canned proposal, no API key).
+- **`templates/draft.html` + `static/draft-edit.js` + `app.css`** — raw
+  Markdown in a `<pre white-space:pre-wrap>`; selection offsets map 1:1
+  to `current`. Floating "Revise…" → instruction → diff (word-level) +
+  note + `RunMeta` footer → accept / retry / reject. New selections are
+  locked out while a proposal is open (one edit at a time). "Undo last",
+  "Download .md", a history list.
+- **`templates/result.html`** — each result section gets an "Edit draft"
+  button (`POST /drafts` with that section's text). The stateless run
+  path is otherwise unchanged.
+- **`tests/test_drafts.py`** — splice + replay units, `create_or_get`
+  dedupe, `/revise` doesn't mutate, `/accept` records + re-splices,
+  `/undo` reverts, `/download` returns `current`. `targeted_editor.run`
+  stubbed autouse. `uv run pytest` (68) and `uv run lint-imports` clean.
+  Also verified end to end in a real browser against Supabase + the live
+  capability (select → revise → diff → accept → undo → download).
+
 ## 2026-08-30 — Wire the real `job-analyst` capability into the analyse step
 
 The `/jobs/{id}/analyse` step now calls the real capability instead of the

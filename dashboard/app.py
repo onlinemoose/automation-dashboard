@@ -9,6 +9,7 @@ See `docs/BACKGROUND_DOCUMENTS.md` and `docs/JOB_POSTS.md`.
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 import warnings
@@ -16,13 +17,13 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
-from dashboard import _documents, _job_analysis, _jobs
+from dashboard import _documents, _drafts, _job_analysis, _jobs, _targeted_edit
 from dashboard._auth import is_authed, password_hash, verify_password
 from dashboard._render import to_html
 from dashboard.pages import PAGES, PAGES_BY_SLUG
@@ -360,6 +361,165 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
             return redirect
         await run_in_threadpool(_jobs.delete_job_post, job_id)
         return RedirectResponse("/jobs", status_code=303)
+
+    # --- working drafts ------------------------------------------------
+    # The app's own store (CLAUDE.md rule 6), not a capability. A result
+    # section can be opened as an editable draft; the user selects a span,
+    # gives an instruction, and the `targeted-editor` capability revises
+    # that span only. The splice, linear history, and undo-by-replay are
+    # the app's own (`_drafts.py`). See `docs/DRAFTS.md`.
+
+    def _draft_state(draft: _drafts.Draft) -> dict:
+        return {
+            "current": draft.current,
+            "revision_count": len(draft.revisions),
+            "can_undo": bool(draft.revisions),
+        }
+
+    @app.post("/drafts", response_class=HTMLResponse)
+    async def draft_open(request: Request):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        form = await request.form()
+        page_slug = str(form.get("slug") or "").strip()
+        section = str(form.get("section") or "").strip()
+        text = str(form.get("text") or "")
+        if not page_slug or not section or not text.strip():
+            raise HTTPException(status_code=422, detail="slug, section and text are required")
+        draft = await run_in_threadpool(
+            _drafts.create_or_get_draft, page_slug, section, text
+        )
+        return RedirectResponse(f"/drafts/{draft.id}", status_code=303)
+
+    @app.get("/drafts/{draft_id}", response_class=HTMLResponse)
+    async def draft_edit(request: Request, draft_id: str):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        if draft is None:
+            raise HTTPException(status_code=404)
+        return render(
+            "draft.html", request,
+            draft=draft,
+            capability=_targeted_edit.CAPABILITY,
+            capability_version=_targeted_edit.capability_version(),
+        )
+
+    @app.post("/drafts/{draft_id}/revise")
+    async def draft_revise(request: Request, draft_id: str):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        if draft is None:
+            raise HTTPException(status_code=404)
+        form = await request.form()
+        selection = str(form.get("selection") or "")
+        instruction = str(form.get("instruction") or "").strip()
+        try:
+            span_start = int(form.get("span_start"))
+            span_len = int(form.get("span_len"))
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "bad span offsets"}, status_code=422)
+        if not instruction:
+            return JSONResponse({"error": "An instruction is required."}, status_code=422)
+        if draft.current[span_start:span_start + span_len] != selection:
+            return JSONResponse(
+                {"error": "The selection is out of date — reload and try again."},
+                status_code=409,
+            )
+
+        if app.state.stub_runs:
+            proposed = _targeted_edit.Revision(
+                revised=f"[stubbed revision] {selection.strip()}",
+                note="Stub mode — no capability call.",
+                cost=_targeted_edit.Cost(),
+            )
+        else:
+            try:
+                proposed = await run_in_threadpool(
+                    _targeted_edit.revise,
+                    draft.current, selection, instruction,
+                    kind=_targeted_edit.kind_for_section(draft.section),
+                )
+            except (ValueError, RuntimeError) as exc:
+                return JSONResponse({"error": str(exc)}, status_code=422)
+
+        return JSONResponse(
+            {
+                "revised": proposed.revised,
+                "note": proposed.note,
+                "cost": proposed.cost.to_dict(),
+                "span_start": span_start,
+                "span_len": span_len,
+            }
+        )
+
+    @app.post("/drafts/{draft_id}/accept")
+    async def draft_accept(request: Request, draft_id: str):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        if draft is None:
+            raise HTTPException(status_code=404)
+        form = await request.form()
+        selection = str(form.get("selection") or "")
+        revised = str(form.get("revised") or "")
+        instruction = str(form.get("instruction") or "").strip()
+        note = str(form.get("note") or "").strip()
+        try:
+            span_start = int(form.get("span_start"))
+            span_len = int(form.get("span_len"))
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "bad span offsets"}, status_code=422)
+        try:
+            cost = json.loads(str(form.get("cost") or "{}"))
+            if not isinstance(cost, dict):
+                cost = {}
+        except ValueError:
+            cost = {}
+        if draft.current[span_start:span_start + span_len] != selection:
+            return JSONResponse(
+                {"error": "The selection is out of date — reload and try again."},
+                status_code=409,
+            )
+        updated = await run_in_threadpool(
+            lambda: _drafts.record_revision(
+                draft_id,
+                instruction=instruction,
+                selection=selection,
+                span_start=span_start,
+                span_len=span_len,
+                revised=revised,
+                note=note,
+                cost=cost,
+            )
+        )
+        if updated is None:
+            raise HTTPException(status_code=404)
+        return JSONResponse(_draft_state(updated))
+
+    @app.post("/drafts/{draft_id}/undo")
+    async def draft_undo(request: Request, draft_id: str):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        updated = await run_in_threadpool(_drafts.undo_last, draft_id)
+        if updated is None:
+            raise HTTPException(status_code=404)
+        return JSONResponse(_draft_state(updated))
+
+    @app.get("/drafts/{draft_id}/download")
+    async def draft_download(request: Request, draft_id: str):
+        if (redirect := guard(request)) is not None:
+            return redirect
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        if draft is None:
+            raise HTTPException(status_code=404)
+        name = f"{draft.slug}-{draft.section}".strip("-") or "draft"
+        return Response(
+            content=draft.current,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}.md"'},
+        )
 
     return app
 
