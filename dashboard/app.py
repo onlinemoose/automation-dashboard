@@ -341,8 +341,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         updated = await run_in_threadpool(_jobs.update_job_post, job_id, emphasis=text)
         cost = analysis.cost
         meta = RunMeta(
-            capability="job-post-analyst",
-            capability_version="(stub)",
+            capability="job-analyst",
+            capability_version=_job_analysis.capability_version(),
             cost_usd=float(cost.usd),
             input_tokens=cost.input_tokens,
             output_tokens=cost.output_tokens,

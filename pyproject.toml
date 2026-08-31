@@ -20,6 +20,7 @@ dependencies = [
     # in uv.lock.
     "cover-letter-writer",
     "cv-writer",
+    "job-analyst",
 ]
 
 [dependency-groups]
@@ -48,3 +49,7 @@ addopts = "-q"
 [tool.uv.sources]
 cover-letter-writer = { git = "https://github.com/onlinemoose/cover-letter-writer.git", rev = "v0.11.0" }
 cv-writer = { git = "https://github.com/onlinemoose/cv-writer.git", rev = "v0.3.0" }
+# job-analyst isn't tagged yet — local path override (CLAUDE.md rule 3).
+# Swap for `{ git = "https://github.com/onlinemoose/job-analyst.git", rev = "vX.Y.Z" }`
+# once it cuts its first release.
+job-analyst = { path = "../job-analyst", editable = true }

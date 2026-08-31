@@ -3,6 +3,33 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-30 — Wire the real `job-analyst` capability into the analyse step
+
+The `/jobs/{id}/analyse` step now calls the real capability instead of the
+fixed placeholder list.
+
+- **`job-analyst` is a dependency.** `pyproject.toml` adds `job-analyst`
+  plus a `[tool.uv.sources]` **path** override
+  (`{ path = "../job-analyst", editable = true }`) — it isn't tagged yet.
+  Switch to a `git … @vX.Y.Z` pin once it releases.
+- **`dashboard/_job_analysis.py`** — `analyse()` calls
+  `job_analyst.run(Input(posting=…))` and `_to_analysis()` maps `Output`:
+  importance `critical→must-have`, `high`/`medium→strong`,
+  `low→nice-to-have`; `reading_between_the_lines` appended to the summary
+  as a Markdown bullet list; `Cost` mapped field-for-field. The
+  format/parse helpers are unchanged. Needs `ANTHROPIC_API_KEY` in the
+  env (put it in `.env`).
+- **`dashboard/app.py`** — the analyse route's `RunMeta` now reports
+  `capability="job-analyst"` and the installed version
+  (`_job_analysis.capability_version()`) instead of `"(stub)"`.
+- **`tests/test_jobs.py`** — new autouse `stub_analyst` fixture
+  monkeypatches `job_analyst.run` so the suite stays offline, the same
+  way `test_pages.py` stubs a page's `run`.
+- `uv run pytest` and `uv run lint-imports` clean.
+- **Note:** the analyse route does not honour `DASHBOARD_STUB_RUNS` — it
+  always calls the capability. Fine for now; revisit if a no-key
+  click-through of `/jobs` is wanted.
+
 ## 2026-08-30 — Job posts area + analyse → annotate → writer workflow
 
 Branch `job-post-analysis`. Experiment: add a posting once, analyse it into

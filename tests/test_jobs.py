@@ -4,12 +4,14 @@ page.
 
 The store falls back to an in-process dict when Supabase isn't configured
 (no env vars in the test run), so nothing here needs a network. The analyse
-step is a placeholder (`dashboard/_job_analysis.analyse`) until the
-`job-post-analyst` capability exists.
+step calls the `job-analyst` capability; `stub_analyst` below monkeypatches
+its `run()` so the suite stays offline, the same way `test_pages.py` stubs a
+page's `run`.
 """
 
 from __future__ import annotations
 
+import job_analyst
 import pytest
 from starlette.testclient import TestClient
 
@@ -25,6 +27,41 @@ def fresh_store():
     _jobs.reset()
     yield
     _jobs.reset()
+
+
+@pytest.fixture(autouse=True)
+def stub_analyst(monkeypatch):
+    """Stand in for the job-analyst LLM call so tests never hit the network."""
+
+    def fake_run(data: job_analyst.Input) -> job_analyst.Output:
+        first = next((ln.strip() for ln in data.posting.splitlines() if ln.strip()), "the role")
+        return job_analyst.Output(
+            requirements=[
+                job_analyst.Requirement(
+                    point="Lead with evidence you can do the core job named in the posting",
+                    quote=first[:200],
+                    importance="critical",
+                    rationale="The headline responsibility.",
+                ),
+                job_analyst.Requirement(
+                    point="Show measurable outcomes, not just responsibilities",
+                    quote="",
+                    importance="high",
+                    rationale="Hiring managers discount duties; numbers land.",
+                ),
+            ],
+            summary=f"This employer is hiring for {first[:120]!r}.",
+            reading_between_the_lines=["The seniority bar is higher than the title suggests."],
+            cost=job_analyst.Cost(
+                usd=0.0,
+                input_tokens=0,
+                output_tokens=0,
+                cache_read_input_tokens=0,
+                cache_write_input_tokens=0,
+            ),
+        )
+
+    monkeypatch.setattr(job_analyst, "run", fake_run)
 
 
 @pytest.fixture

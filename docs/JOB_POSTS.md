@@ -38,39 +38,57 @@ picked id into `job_posting` text and an `emphasis` list.
 `tests/test_guardrails.py` lists them in `ALLOWED_ROUTES` for that reason,
 the same category as `/documents`.
 
-## The analysis is a capability (not built yet)
+## The analysis is a capability
 
 Reading a posting and ranking its requirements is LLM domain logic, so it
-belongs in its own capability module — `job-post-analyst` — consumed here
-as a pinned git dependency, the same as `cover-letter-writer`. It is **not**
-an orchestration flow: the chain is two capabilities with a human
-annotation step in the middle, so the composition lives in the experience
-layer (this app), at an allowed seam.
+lives in its own capability module — **`job-analyst`** (imported as
+`job_analyst`) — consumed here like `cover-letter-writer`. It is **not** an
+orchestration flow: the chain is two capabilities with a human annotation
+step in the middle, so the composition lives in the experience layer (this
+app), at an allowed seam.
 
-Until that repo exists, `dashboard/_job_analysis.analyse()` returns a fixed
-placeholder list. When it lands:
+`dashboard/_job_analysis.analyse()` calls `job_analyst.run(Input(posting=…))`
+and maps the `Output` onto this app's `Analysis`:
 
 ```python
 # dashboard/_job_analysis.py
-from job_post_analyst import Input, run
+import job_analyst
 
 def analyse(posting: str) -> Analysis:
-    return run(Input(posting=posting))   # map Output -> Analysis
+    return _to_analysis(job_analyst.run(job_analyst.Input(posting=posting)))
 ```
 
-plus `uv add "job-post-analyst @ git+…@vX.Y.Z"`, wire the real `Cost` into
-the `RunMeta` footer in the analyse route, and a `docs/PROGRESS.md` entry.
+Needs `ANTHROPIC_API_KEY` in the environment (CLAUDE.md rule 7). Anthropic
+SDK errors (auth, rate limit) propagate to the request.
 
-**Contract the dashboard codes against** (`Analysis` mirrors it):
+**What `job-analyst` actually returns**, and how it's mapped:
 
 ```python
-Input(posting: str, role_hint: str | None = None, count: int = 12)
+Input(posting: str, role_hint: str | None = None, count: int = 12,
+      expert_guidance: str | None = None)
 
 Requirement(point: str, quote: str, importance: str, rationale: str)
-    # importance: "must-have" | "strong" | "nice-to-have"
+    # importance: "critical" | "high" | "medium" | "low"
 
-Output(requirements: list[Requirement], summary: str, cost: Cost)
+Output(requirements, summary, reading_between_the_lines: list[str], cost)
 ```
+
+- **importance** `critical → must-have`, `high`/`medium → strong`,
+  `low → nice-to-have` (`_IMPORTANCE` in `_job_analysis.py`).
+- **`reading_between_the_lines`** is appended to `Analysis.summary` as a
+  `**Reading between the lines**` bullet list (the summary is rendered
+  through the Markdown filter on the job detail page).
+- **`quote`** is already verified verbatim against the posting by the
+  capability; the dashboard passes it straight through to `Emphasis.quote`.
+- **`cost`** maps field-for-field onto the `RunMeta` footer.
+
+### Local dev / release pin
+
+`job-analyst` isn't tagged yet, so `pyproject.toml` overrides it to a path:
+`job-analyst = { path = "../job-analyst", editable = true }` (a sibling
+checkout). Once it cuts a release, swap that for
+`{ git = "https://github.com/onlinemoose/job-analyst.git", rev = "vX.Y.Z" }`,
+`uv lock`, and add a `docs/PROGRESS.md` entry.
 
 ## The emphasis format
 

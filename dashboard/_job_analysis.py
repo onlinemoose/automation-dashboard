@@ -2,17 +2,14 @@
 and move that list to/from the annotated ``emphasis`` text the writer pages
 consume.
 
-The analysis itself is LLM domain logic and belongs in its own capability
-module (``job-post-analyst``), consumed here as a pinned git dependency the
-same way ``cover-letter-writer`` is. That repo does not exist yet, so
-:func:`analyse` returns a **placeholder** ``Analysis`` for now — enough to
-build and click through the whole flow. When the capability lands:
-
-    from job_post_analyst import Input, run
-    ...
-    output = run(Input(posting=posting))
-
-and this module keeps only the formatting/parsing helpers.
+The analysis itself is LLM domain logic and lives in its own capability
+module, ``job-analyst`` (imported as ``job_analyst``), consumed here the
+same way ``cover-letter-writer`` is. :func:`analyse` calls its ``run()``
+front door and maps the ``Output`` onto this app's ``Analysis`` shape — the
+capability's four-value importance scale collapses to the dashboard's
+three, and ``reading_between_the_lines`` is folded into the summary. It
+needs ``ANTHROPIC_API_KEY`` in the environment (CLAUDE.md rule 7); the rest
+of this module is just formatting/parsing helpers.
 
 Annotated emphasis text — one block per requirement, blank line between:
 
@@ -31,6 +28,9 @@ so a hand-typed "one point per line" list still works unchanged.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from importlib import metadata
+
+import job_analyst
 
 
 @dataclass(frozen=True)
@@ -69,61 +69,63 @@ class EmphasisPoint:
     quote: str | None = None
 
 
-# --- the analysis step (placeholder until job-post-analyst exists) --------
+# --- the analysis step (the job-analyst capability) ----------------------
 
-_PLACEHOLDER_NOTE = (
-    "_(Placeholder analysis — the `job-post-analyst` capability isn't wired up "
-    "yet. Once it is, this list is written by the model from the posting.)_"
-)
+# job-analyst ranks on "critical" | "high" | "medium" | "low"; the
+# dashboard's emphasis list has three tiers. "high" and "medium" both land
+# on "strong" — the distinction that matters downstream is gate vs.
+# not-a-gate.
+_IMPORTANCE = {
+    "critical": "must-have",
+    "high": "strong",
+    "medium": "strong",
+    "low": "nice-to-have",
+}
+
+
+def capability_version() -> str:
+    """The installed ``job-analyst`` version, for the run-metadata footer."""
+    try:
+        return "v" + metadata.version("job-analyst")
+    except metadata.PackageNotFoundError:  # pragma: no cover - always installed in practice
+        return "(unknown)"
 
 
 def analyse(posting: str) -> Analysis:
     """Analyse a job posting into a prioritised requirements list.
 
-    PLACEHOLDER: returns a fixed, illustrative list regardless of input.
-    Swap the body for ``job_post_analyst.run(Input(posting=posting))`` when
-    that capability is published and pinned.
+    Calls the ``job-analyst`` capability (one LLM call) and maps its
+    ``Output`` onto this app's ``Analysis``. Needs ``ANTHROPIC_API_KEY`` in
+    the environment. Anthropic SDK errors (auth, rate limit) propagate.
     """
-    first_line = next((ln.strip() for ln in posting.splitlines() if ln.strip()), "the role")
+    return _to_analysis(job_analyst.run(job_analyst.Input(posting=posting)))
+
+
+def _to_analysis(output: job_analyst.Output) -> Analysis:
     reqs = [
         Requirement(
-            point="Lead with evidence you can do the core job named in the posting",
-            quote=first_line[:200],
-            importance="must-have",
-            rationale="The headline responsibility — everything else is read against it.",
-        ),
-        Requirement(
-            point="Show measurable outcomes, not just responsibilities",
-            quote="track record of delivering results",
-            importance="strong",
-            rationale="Hiring managers discount duties; numbers and before/after land.",
-        ),
-        Requirement(
-            point="Demonstrate you can work across teams and influence without authority",
-            quote="work closely with cross-functional stakeholders",
-            importance="strong",
-            rationale="Signals the role is matrixed and collaboration is a real risk.",
-        ),
-        Requirement(
-            point="Address the seniority/scope bar directly (team size, budget, ambiguity)",
-            quote="operate with autonomy in a fast-moving environment",
-            importance="strong",
-            rationale="They've been burned by someone who needed too much direction.",
-        ),
-        Requirement(
-            point="Name the domain and show you understand its constraints",
-            quote="experience in a regulated / high-growth / enterprise context",
-            importance="nice-to-have",
-            rationale="A shortlist tiebreaker rather than a gate.",
-        ),
+            point=req.point,
+            quote=req.quote,
+            importance=_IMPORTANCE.get(req.importance, "strong"),
+            rationale=req.rationale,
+        )
+        for req in output.requirements
     ]
+    summary = output.summary.rstrip()
+    if output.reading_between_the_lines:
+        bullets = "\n".join(f"- {line}" for line in output.reading_between_the_lines)
+        summary = f"{summary}\n\n**Reading between the lines**\n\n{bullets}"
+    c = output.cost
     return Analysis(
         requirements=reqs,
-        summary=(
-            f"This employer is hiring for {first_line[:120]!r}. "
-            + _PLACEHOLDER_NOTE
+        summary=summary,
+        cost=Cost(
+            usd=c.usd,
+            input_tokens=c.input_tokens,
+            output_tokens=c.output_tokens,
+            cache_read_input_tokens=c.cache_read_input_tokens,
+            cache_write_input_tokens=c.cache_write_input_tokens,
         ),
-        cost=Cost(),
     )
 
 
