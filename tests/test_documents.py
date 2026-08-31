@@ -14,6 +14,10 @@ from dashboard import _documents
 from dashboard.app import create_app
 from dashboard.pages import cover_letter_writer
 
+# Must match `create_app`'s default `as_user` — the id the app scopes by
+# when auth is disabled.
+USER = "test-user"
+
 
 @pytest.fixture(autouse=True)
 def fresh_store():
@@ -31,27 +35,101 @@ def client() -> TestClient:
 
 
 def test_store_crud_roundtrip() -> None:
-    a = _documents.create_document("Bio", "Ten years shipping data tools.")
-    b = _documents.create_document("Portfolio", "Rebuilt the billing pipeline.")
+    a = _documents.create_document("Bio", "Ten years shipping data tools.", USER)
+    b = _documents.create_document("Portfolio", "Rebuilt the billing pipeline.", USER)
 
-    assert [d.title for d in _documents.list_documents()] == ["Bio", "Portfolio"]
-    assert _documents.get_document(a.id).body == "Ten years shipping data tools."
-    assert {d.id for d in _documents.get_documents([a.id, b.id])} == {a.id, b.id}
-    assert _documents.get_documents([]) == []
+    assert [d.title for d in _documents.list_documents(USER)] == ["Bio", "Portfolio"]
+    assert _documents.get_document(a.id, USER).body == "Ten years shipping data tools."
+    assert {d.id for d in _documents.get_documents([a.id, b.id], USER)} == {a.id, b.id}
+    assert _documents.get_documents([], USER) == []
 
-    _documents.update_document(a.id, "Bio", "Twelve years now.")
-    assert _documents.get_document(a.id).body == "Twelve years now."
+    _documents.update_document(a.id, "Bio", "Twelve years now.", USER)
+    assert _documents.get_document(a.id, USER).body == "Twelve years now."
 
-    _documents.delete_document(a.id)
-    assert _documents.get_document(a.id) is None
-    assert [d.title for d in _documents.list_documents()] == ["Portfolio"]
+    _documents.delete_document(a.id, USER)
+    assert _documents.get_document(a.id, USER) is None
+    assert [d.title for d in _documents.list_documents(USER)] == ["Portfolio"]
+
+
+def test_documents_are_scoped_to_the_user() -> None:
+    """A row created by one user is invisible to another — not merely
+    unlisted, but unreadable, unwritable and undeletable."""
+    mine = _documents.create_document("Bio", "Mine.", "user-a")
+
+    assert _documents.list_documents("user-b") == []
+    assert _documents.get_document(mine.id, "user-b") is None
+    assert _documents.get_documents([mine.id], "user-b") == []
+    assert _documents.update_document(mine.id, "Hijacked", "Theirs.", "user-b") is None
+    _documents.delete_document(mine.id, "user-b")
+
+    # A's row is untouched by any of that.
+    still = _documents.get_document(mine.id, "user-a")
+    assert still is not None
+    assert (still.title, still.body) == ("Bio", "Mine.")
+    assert still.user_id == "user-a"
+
+
+def test_the_documents_page_only_lists_the_callers_docs() -> None:
+    a = TestClient(create_app(auth_disabled=True, as_user="user-a"))
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+
+    a.post("/documents/new", data={"title": "Alpha note", "body": "Private."})
+
+    assert "Alpha note" in a.get("/documents").text
+    assert "Alpha note" not in b.get("/documents").text
+
+
+def test_another_users_document_is_404_over_http() -> None:
+    a = TestClient(create_app(auth_disabled=True, as_user="user-a"))
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+    a.post("/documents/new", data={"title": "Alpha note", "body": "Private."})
+    doc = _documents.list_documents("user-a")[0]
+
+    assert b.get(f"/documents/{doc.id}").status_code == 404
+    assert b.post(f"/documents/{doc.id}", data={"title": "X", "body": "Y"}).status_code == 404
+    # Delete is a no-op rather than a 404 (it redirects either way) — what
+    # matters is that A's row survives it.
+    b.post(f"/documents/{doc.id}/delete", follow_redirects=False)
+    assert _documents.get_document(doc.id, "user-a") is not None
+
+
+def test_checklist_only_lists_the_callers_docs() -> None:
+    _documents.create_document("Alpha bio", "Private.", "user-a")
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+    body = b.get("/p/cover-letter-writer").text
+    assert 'name="background_document_ids"' in body
+    assert "Alpha bio" not in body
+
+
+def test_another_users_document_id_cannot_be_smuggled_into_a_run(monkeypatch) -> None:
+    """Ticking a foreign id in the checklist resolves to nothing, rather
+    than folding that user's text into the capability call."""
+    foreign = _documents.create_document("Alpha bio", "A's private text.", "user-a")
+
+    seen: dict[str, object] = {}
+
+    def fake_run(data, **_):
+        seen["data"] = data
+        return cover_letter_writer.PAGE.example_output
+
+    monkeypatch.setattr(cover_letter_writer.PAGE, "run", fake_run)
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+
+    resp = b.post(
+        "/p/cover-letter-writer",
+        data={**dict(cover_letter_writer.PAGE.example_form),
+              "background_document_ids": foreign.id,
+              "background_documents": "b's own note"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["data"].background_documents == ["b's own note"]
 
 
 # --- the CRUD screen -------------------------------------------------------
 
 
 def test_documents_page_lists_saved_docs(client: TestClient) -> None:
-    _documents.create_document("Company context", "They sell to hospitals.")
+    _documents.create_document("Company context", "They sell to hospitals.", USER)
     body = client.get("/documents").text
     assert "Company context" in body
     assert "They sell to hospitals." in body
@@ -71,7 +149,7 @@ def test_create_edit_delete_through_the_ui(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert resp.status_code == 303 and resp.headers["location"] == "/documents"
-    doc = _documents.list_documents()[0]
+    doc = _documents.list_documents(USER)[0]
 
     edit_form = client.get(f"/documents/{doc.id}").text
     assert "First draft." in edit_form
@@ -82,18 +160,18 @@ def test_create_edit_delete_through_the_ui(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert _documents.get_document(doc.id).body == "Second draft."
+    assert _documents.get_document(doc.id, USER).body == "Second draft."
 
     resp = client.post(f"/documents/{doc.id}/delete", follow_redirects=False)
     assert resp.status_code == 303
-    assert _documents.list_documents() == []
+    assert _documents.list_documents(USER) == []
 
 
 def test_create_requires_a_title(client: TestClient) -> None:
     resp = client.post("/documents/new", data={"title": "", "body": "x"})
     assert resp.status_code == 422
     assert "Title is required." in resp.text
-    assert _documents.list_documents() == []
+    assert _documents.list_documents(USER) == []
 
 
 def test_edit_unknown_doc_is_404(client: TestClient) -> None:
@@ -111,14 +189,14 @@ def test_documents_area_requires_auth() -> None:
 
 
 def test_checklist_appears_on_the_writer_page(client: TestClient) -> None:
-    _documents.create_document("Bio", "Ten years shipping data tools.")
+    _documents.create_document("Bio", "Ten years shipping data tools.", USER)
     body = client.get("/p/cover-letter-writer").text
     assert 'name="background_document_ids"' in body
     assert "Bio" in body
 
 
 def test_ticked_documents_reach_the_capability_input(monkeypatch) -> None:
-    doc = _documents.create_document("Bio", "Ten years shipping data tools.")
+    doc = _documents.create_document("Bio", "Ten years shipping data tools.", USER)
 
     seen: dict[str, object] = {}
 

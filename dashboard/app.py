@@ -197,11 +197,15 @@ def create_app(
             return redirect
         return render("index.html", request, pages=PAGES)
 
-    async def _doc_choices(page: Page) -> list:
-        return await run_in_threadpool(_documents.list_documents) if _wants_documents(page) else []
+    async def _doc_choices(page: Page, user_id: str) -> list:
+        if not _wants_documents(page):
+            return []
+        return await run_in_threadpool(_documents.list_documents, user_id)
 
-    async def _job_choices(page: Page) -> list:
-        return await run_in_threadpool(_jobs.list_job_posts) if _wants_jobs(page) else []
+    async def _job_choices(page: Page, user_id: str) -> list:
+        if not _wants_jobs(page):
+            return []
+        return await run_in_threadpool(_jobs.list_job_posts, user_id)
 
     def _result_page(request: Request, page: Page, output: object) -> Response:
         meta = page.run_meta(output) if page.run_meta else None
@@ -286,6 +290,7 @@ def create_app(
     async def page_form(request: Request, slug: str):
         if (redirect := guard(request)) is not None:
             return redirect
+        uid = _auth.current_user_id(request)  # never None past guard()
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
@@ -293,26 +298,29 @@ def create_app(
         return render(
             "page.html", request,
             page=page, values=prefill, errors={},
-            documents=await _doc_choices(page), jobs=await _job_choices(page),
+            documents=await _doc_choices(page, uid), jobs=await _job_choices(page, uid),
         )
 
     @app.post("/p/{slug}", response_class=HTMLResponse)
     async def page_submit(request: Request, slug: str):
         if (redirect := guard(request)) is not None:
             return redirect
+        uid = _auth.current_user_id(request)  # never None past guard()
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
         form = _form_values(await request.form(), page)
         try:
             # `build_input` may hit the Background documents store to resolve a
-            # picked id — run it off the event loop like `run()` itself.
-            data = await run_in_threadpool(page.build_input, form)
+            # picked id — run it off the event loop like `run()` itself. It
+            # takes `uid` because those stores are per-user; the capability's
+            # own `Input` never sees it.
+            data = await run_in_threadpool(page.build_input, form, uid)
         except FormError as exc:
             return render(
                 "page.html", request, status_code=422,
                 page=page, values=form, errors=exc.errors,
-                documents=await _doc_choices(page), jobs=await _job_choices(page),
+                documents=await _doc_choices(page, uid), jobs=await _job_choices(page, uid),
             )
         if app.state.stub_runs:
             return _result_page(request, page, page.example_output)  # no capability call
@@ -334,7 +342,8 @@ def create_app(
     async def documents_list(request: Request):
         if (redirect := guard(request)) is not None:
             return redirect
-        docs = await run_in_threadpool(_documents.list_documents)
+        uid = _auth.current_user_id(request)
+        docs = await run_in_threadpool(_documents.list_documents, uid)
         return render("documents.html", request, documents=docs)
 
     @app.get("/documents/new", response_class=HTMLResponse)
@@ -356,14 +365,16 @@ def create_app(
                 doc=None, values={"title": title, "body": body},
                 errors={"title": "Title is required."},
             )
-        await run_in_threadpool(_documents.create_document, title, body)
+        uid = _auth.current_user_id(request)
+        await run_in_threadpool(_documents.create_document, title, body, uid)
         return RedirectResponse("/documents", status_code=303)
 
     @app.get("/documents/{doc_id}", response_class=HTMLResponse)
     async def document_edit(request: Request, doc_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        doc = await run_in_threadpool(_documents.get_document, doc_id)
+        uid = _auth.current_user_id(request)
+        doc = await run_in_threadpool(_documents.get_document, doc_id, uid)
         if doc is None:
             raise HTTPException(status_code=404)
         return render(
@@ -375,17 +386,20 @@ def create_app(
     async def document_update(request: Request, doc_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
+        uid = _auth.current_user_id(request)
         form = await request.form()
         title = str(form.get("title") or "").strip()
         body = str(form.get("body") or "").strip()
         if not title:
-            doc = await run_in_threadpool(_documents.get_document, doc_id)
+            doc = await run_in_threadpool(_documents.get_document, doc_id, uid)
             return render(
                 "document_form.html", request, status_code=422,
                 doc=doc, values={"title": title, "body": body},
                 errors={"title": "Title is required."},
             )
-        updated = await run_in_threadpool(_documents.update_document, doc_id, title, body)
+        updated = await run_in_threadpool(
+            _documents.update_document, doc_id, title, body, uid
+        )
         if updated is None:
             raise HTTPException(status_code=404)
         return RedirectResponse("/documents", status_code=303)
@@ -394,7 +408,8 @@ def create_app(
     async def document_delete(request: Request, doc_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        await run_in_threadpool(_documents.delete_document, doc_id)
+        uid = _auth.current_user_id(request)
+        await run_in_threadpool(_documents.delete_document, doc_id, uid)
         return RedirectResponse("/documents", status_code=303)
 
     # --- job posts -----------------------------------------------------
@@ -407,7 +422,8 @@ def create_app(
     async def jobs_list(request: Request):
         if (redirect := guard(request)) is not None:
             return redirect
-        jobs = await run_in_threadpool(_jobs.list_job_posts)
+        uid = _auth.current_user_id(request)
+        jobs = await run_in_threadpool(_jobs.list_job_posts, uid)
         return render("jobs.html", request, jobs=jobs)
 
     @app.get("/jobs/new", response_class=HTMLResponse)
@@ -433,14 +449,16 @@ def create_app(
                 "job_form.html", request, status_code=422,
                 values={"title": title, "posting": posting}, errors=errors,
             )
-        job = await run_in_threadpool(_jobs.create_job_post, title, posting)
+        uid = _auth.current_user_id(request)
+        job = await run_in_threadpool(_jobs.create_job_post, title, posting, uid)
         return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
     @app.get("/jobs/{job_id}", response_class=HTMLResponse)
     async def job_detail(request: Request, job_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        job = await run_in_threadpool(_jobs.get_job_post, job_id)
+        uid = _auth.current_user_id(request)
+        job = await run_in_threadpool(_jobs.get_job_post, job_id, uid)
         if job is None:
             raise HTTPException(status_code=404)
         return render(
@@ -452,12 +470,13 @@ def create_app(
     async def job_save(request: Request, job_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
+        uid = _auth.current_user_id(request)
         form = await request.form()
         title = str(form.get("title") or "").strip()
         posting = str(form.get("posting") or "").strip()
         emphasis = str(form.get("emphasis") or "")
         if not title or not posting:
-            job = await run_in_threadpool(_jobs.get_job_post, job_id)
+            job = await run_in_threadpool(_jobs.get_job_post, job_id, uid)
             if job is None:
                 raise HTTPException(status_code=404)
             errors = {}
@@ -471,8 +490,9 @@ def create_app(
                 errors=errors, summary=None, meta=None,
             )
         updated = await run_in_threadpool(
-            _jobs.update_job_post, job_id,
-            title=title, posting=posting, emphasis=emphasis,
+            lambda: _jobs.update_job_post(
+                job_id, uid, title=title, posting=posting, emphasis=emphasis
+            )
         )
         if updated is None:
             raise HTTPException(status_code=404)
@@ -482,7 +502,8 @@ def create_app(
     async def job_analyse(request: Request, job_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        job = await run_in_threadpool(_jobs.get_job_post, job_id)
+        uid = _auth.current_user_id(request)
+        job = await run_in_threadpool(_jobs.get_job_post, job_id, uid)
         if job is None:
             raise HTTPException(status_code=404)
         analysis = await run_in_threadpool(_job_analysis.analyse, job.posting)
@@ -497,7 +518,9 @@ def create_app(
                 notice="The analysis came back empty — nothing was changed. Try again.",
             )
         text = _job_analysis.requirements_to_emphasis_text(analysis)
-        updated = await run_in_threadpool(_jobs.update_job_post, job_id, emphasis=text)
+        updated = await run_in_threadpool(
+            lambda: _jobs.update_job_post(job_id, uid, emphasis=text)
+        )
         cost = analysis.cost
         meta = RunMeta(
             capability="job-analyst",
@@ -517,7 +540,8 @@ def create_app(
     async def job_delete(request: Request, job_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        await run_in_threadpool(_jobs.delete_job_post, job_id)
+        uid = _auth.current_user_id(request)
+        await run_in_threadpool(_jobs.delete_job_post, job_id, uid)
         return RedirectResponse("/jobs", status_code=303)
 
     # --- working drafts ------------------------------------------------

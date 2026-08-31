@@ -11,8 +11,12 @@ unset the module falls back to an in-process dict and warns — the same
 shape as the ephemeral `SESSION_SECRET` fallback in `app.py`, so local dev
 and the test suite run without Supabase (nothing persists across restarts).
 
-If the store ever needs to move (real accounts, a different Postgres),
-swap the internals here — page code and routes don't change.
+Rows are scoped per user: every method takes the owning `user_id` and
+every query filters on it, reads and writes alike. See
+`docs/USER_SCOPING.md`.
+
+If the store ever needs to move (a different Postgres), swap the
+internals here — page code and routes don't change.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ class Document:
     title: str
     body: str
     updated_at: datetime | None = None
+    user_id: str = ""  # the Supabase auth.users id that owns this row
 
 
 def _parse_ts(value: object) -> datetime | None:
@@ -46,34 +51,46 @@ def _parse_ts(value: object) -> datetime | None:
 
 
 class _Backend(Protocol):
-    def list(self) -> list[Document]: ...
-    def get_many(self, ids: Iterable[str]) -> list[Document]: ...
-    def get(self, doc_id: str) -> Document | None: ...
-    def create(self, title: str, body: str) -> Document: ...
-    def update(self, doc_id: str, title: str, body: str) -> Document | None: ...
-    def delete(self, doc_id: str) -> None: ...
+    def list(self, user_id: str) -> list[Document]: ...
+    def get_many(self, ids: Iterable[str], user_id: str) -> list[Document]: ...
+    def get(self, doc_id: str, user_id: str) -> Document | None: ...
+    def create(self, title: str, body: str, user_id: str) -> Document: ...
+    def update(
+        self, doc_id: str, title: str, body: str, user_id: str
+    ) -> Document | None: ...
+    def delete(self, doc_id: str, user_id: str) -> None: ...
 
 
 class _MemoryBackend:
-    """Non-persistent fallback. Only used when Supabase isn't configured."""
+    """Non-persistent fallback. Only used when Supabase isn't configured.
+
+    Mirrors the Supabase backend's `user_id` filtering exactly: a row
+    belonging to another user is invisible, not merely unlisted.
+    """
 
     def __init__(self) -> None:
         self._docs: dict[str, Document] = {}
         self._seq = 0
         self._lock = threading.Lock()
 
-    def list(self) -> list[Document]:
-        return sorted(self._docs.values(), key=lambda d: d.title.lower())
+    def list(self, user_id: str) -> list[Document]:
+        mine = [d for d in self._docs.values() if d.user_id == user_id]
+        return sorted(mine, key=lambda d: d.title.lower())
 
-    def get_many(self, ids: Iterable[str]) -> list[Document]:
+    def get_many(self, ids: Iterable[str], user_id: str) -> list[Document]:
         wanted = [i for i in ids if i]
-        found = [self._docs[i] for i in wanted if i in self._docs]
+        found = [
+            self._docs[i]
+            for i in wanted
+            if i in self._docs and self._docs[i].user_id == user_id
+        ]
         return sorted(found, key=lambda d: d.title.lower())
 
-    def get(self, doc_id: str) -> Document | None:
-        return self._docs.get(doc_id)
+    def get(self, doc_id: str, user_id: str) -> Document | None:
+        doc = self._docs.get(doc_id)
+        return doc if doc is not None and doc.user_id == user_id else None
 
-    def create(self, title: str, body: str) -> Document:
+    def create(self, title: str, body: str, user_id: str) -> Document:
         with self._lock:
             self._seq += 1
             doc = Document(
@@ -81,25 +98,31 @@ class _MemoryBackend:
                 title=title,
                 body=body,
                 updated_at=datetime.now(timezone.utc),
+                user_id=user_id,
             )
             self._docs[doc.id] = doc
             return doc
 
-    def update(self, doc_id: str, title: str, body: str) -> Document | None:
+    def update(self, doc_id: str, title: str, body: str, user_id: str) -> Document | None:
         with self._lock:
-            if doc_id not in self._docs:
+            current = self._docs.get(doc_id)
+            if current is None or current.user_id != user_id:
                 return None
             doc = Document(
                 id=doc_id,
                 title=title,
                 body=body,
                 updated_at=datetime.now(timezone.utc),
+                user_id=current.user_id,  # the rebuilt row keeps its owner
             )
             self._docs[doc_id] = doc
             return doc
 
-    def delete(self, doc_id: str) -> None:
-        self._docs.pop(doc_id, None)
+    def delete(self, doc_id: str, user_id: str) -> None:
+        with self._lock:
+            current = self._docs.get(doc_id)
+            if current is not None and current.user_id == user_id:
+                del self._docs[doc_id]
 
 
 class _SupabaseBackend:
@@ -118,40 +141,65 @@ class _SupabaseBackend:
             title=row.get("title") or "",
             body=row.get("body") or "",
             updated_at=_parse_ts(row.get("updated_at")),
+            user_id=row.get("user_id") or "",
         )
 
-    def list(self) -> list[Document]:
-        res = self._table().select("*").order("title").execute()
+    def list(self, user_id: str) -> list[Document]:
+        res = self._table().select("*").eq("user_id", user_id).order("title").execute()
         return [self._row(r) for r in (res.data or [])]
 
-    def get_many(self, ids: Iterable[str]) -> list[Document]:
+    def get_many(self, ids: Iterable[str], user_id: str) -> list[Document]:
         wanted = [i for i in ids if i]
         if not wanted:
             return []
-        res = self._table().select("*").in_("id", wanted).order("title").execute()
+        res = (
+            self._table()
+            .select("*")
+            .in_("id", wanted)
+            .eq("user_id", user_id)
+            .order("title")
+            .execute()
+        )
         return [self._row(r) for r in (res.data or [])]
 
-    def get(self, doc_id: str) -> Document | None:
-        res = self._table().select("*").eq("id", doc_id).limit(1).execute()
+    def get(self, doc_id: str, user_id: str) -> Document | None:
+        res = (
+            self._table()
+            .select("*")
+            .eq("id", doc_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
         rows = res.data or []
         return self._row(rows[0]) if rows else None
 
-    def create(self, title: str, body: str) -> Document:
-        res = self._table().insert({"title": title, "body": body}).execute()
+    def create(self, title: str, body: str, user_id: str) -> Document:
+        res = (
+            self._table()
+            .insert({"title": title, "body": body, "user_id": user_id})
+            .execute()
+        )
         return self._row((res.data or [{}])[0])
 
-    def update(self, doc_id: str, title: str, body: str) -> Document | None:
+    def update(self, doc_id: str, title: str, body: str, user_id: str) -> Document | None:
         payload = {
             "title": title,
             "body": body,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        res = self._table().update(payload).eq("id", doc_id).execute()
+        res = (
+            self._table()
+            .update(payload)
+            .eq("id", doc_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
         rows = res.data or []
         return self._row(rows[0]) if rows else None
 
-    def delete(self, doc_id: str) -> None:
-        self._table().delete().eq("id", doc_id).execute()
+    def delete(self, doc_id: str, user_id: str) -> None:
+        self._table().delete().eq("id", doc_id).eq("user_id", user_id).execute()
 
 
 _backend: _Backend | None = None
@@ -188,27 +236,31 @@ def reset() -> None:
 
 
 # --- public API: thin pass-throughs to the chosen backend ----------------
+#
+# Every one of these takes the owning user's id as its last required
+# argument, with no default — a missed call site is a loud TypeError at
+# import/collection time rather than a silent cross-user read.
 
 
-def list_documents() -> list[Document]:
-    return _store().list()
+def list_documents(user_id: str) -> list[Document]:
+    return _store().list(user_id)
 
 
-def get_documents(ids: Iterable[str]) -> list[Document]:
-    return _store().get_many(ids)
+def get_documents(ids: Iterable[str], user_id: str) -> list[Document]:
+    return _store().get_many(ids, user_id)
 
 
-def get_document(doc_id: str) -> Document | None:
-    return _store().get(doc_id)
+def get_document(doc_id: str, user_id: str) -> Document | None:
+    return _store().get(doc_id, user_id)
 
 
-def create_document(title: str, body: str) -> Document:
-    return _store().create(title, body)
+def create_document(title: str, body: str, user_id: str) -> Document:
+    return _store().create(title, body, user_id)
 
 
-def update_document(doc_id: str, title: str, body: str) -> Document | None:
-    return _store().update(doc_id, title, body)
+def update_document(doc_id: str, title: str, body: str, user_id: str) -> Document | None:
+    return _store().update(doc_id, title, body, user_id)
 
 
-def delete_document(doc_id: str) -> None:
-    _store().delete(doc_id)
+def delete_document(doc_id: str, user_id: str) -> None:
+    _store().delete(doc_id, user_id)

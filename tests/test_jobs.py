@@ -21,6 +21,10 @@ from dashboard.pages import cover_letter_writer
 
 POSTING = "Product Lead at Acme\nOwn the roadmap. Work with cross-functional stakeholders."
 
+# Must match `create_app`'s default `as_user` — the id the app scopes by
+# when auth is disabled.
+USER = "test-user"
+
 
 @pytest.fixture(autouse=True)
 def fresh_store():
@@ -73,31 +77,113 @@ def client() -> TestClient:
 
 
 def test_store_crud_roundtrip() -> None:
-    a = _jobs.create_job_post("Acme — Product Lead", POSTING)
-    b = _jobs.create_job_post("Bract — PM", "Another posting.")
+    a = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    b = _jobs.create_job_post("Bract — PM", "Another posting.", USER)
 
-    assert [j.title for j in _jobs.list_job_posts()] == ["Acme — Product Lead", "Bract — PM"]
-    assert _jobs.get_job_post(a.id).posting == POSTING
+    assert [j.title for j in _jobs.list_job_posts(USER)] == ["Acme — Product Lead", "Bract — PM"]
+    assert _jobs.get_job_post(a.id, USER).posting == POSTING
     assert a.emphasis == ""
 
     # partial update: emphasis only, title/posting untouched
-    _jobs.update_job_post(a.id, emphasis="Lead with roadmap ownership\n- strong here")
-    again = _jobs.get_job_post(a.id)
+    _jobs.update_job_post(a.id, USER, emphasis="Lead with roadmap ownership\n- strong here")
+    again = _jobs.get_job_post(a.id, USER)
     assert again.title == "Acme — Product Lead"
     assert again.posting == POSTING
     assert "strong here" in again.emphasis
 
-    _jobs.delete_job_post(a.id)
-    assert _jobs.get_job_post(a.id) is None
-    assert [j.title for j in _jobs.list_job_posts()] == ["Bract — PM"]
+    _jobs.delete_job_post(a.id, USER)
+    assert _jobs.get_job_post(a.id, USER) is None
+    assert [j.title for j in _jobs.list_job_posts(USER)] == ["Bract — PM"]
     assert b  # keep ref
+
+
+def test_job_posts_are_scoped_to_the_user() -> None:
+    """A row created by one user is invisible to another — not merely
+    unlisted, but unreadable, unwritable and undeletable."""
+    mine = _jobs.create_job_post("Acme — Product Lead", POSTING, "user-a")
+
+    assert _jobs.list_job_posts("user-b") == []
+    assert _jobs.get_job_post(mine.id, "user-b") is None
+    assert _jobs.update_job_post(mine.id, "user-b", title="Hijacked") is None
+    assert _jobs.update_job_post(mine.id, "user-b", emphasis="theirs") is None
+    _jobs.delete_job_post(mine.id, "user-b")
+
+    still = _jobs.get_job_post(mine.id, "user-a")
+    assert still is not None
+    assert (still.title, still.posting, still.emphasis) == (
+        "Acme — Product Lead", POSTING, "",
+    )
+    assert still.user_id == "user-a"
+
+
+def test_the_jobs_page_only_lists_the_callers_posts() -> None:
+    a = TestClient(create_app(auth_disabled=True, as_user="user-a"))
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+
+    a.post("/jobs/new", data={"title": "Alpha role", "posting": POSTING})
+
+    assert "Alpha role" in a.get("/jobs").text
+    assert "Alpha role" not in b.get("/jobs").text
+
+
+def test_another_users_job_post_is_404_over_http() -> None:
+    a = TestClient(create_app(auth_disabled=True, as_user="user-a"))
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+    a.post("/jobs/new", data={"title": "Alpha role", "posting": POSTING})
+    job = _jobs.list_job_posts("user-a")[0]
+
+    assert b.get(f"/jobs/{job.id}").status_code == 404
+    assert b.post(
+        f"/jobs/{job.id}",
+        data={"title": "Hijacked", "posting": "theirs", "emphasis": ""},
+    ).status_code == 404
+    assert b.post(f"/jobs/{job.id}/analyse").status_code == 404
+    b.post(f"/jobs/{job.id}/delete", follow_redirects=False)
+
+    still = _jobs.get_job_post(job.id, "user-a")
+    assert still is not None and still.title == "Alpha role"
+
+
+def test_picker_only_lists_the_callers_jobs() -> None:
+    _jobs.create_job_post("Alpha role", POSTING, "user-a")
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+    body = b.get("/p/cover-letter-writer").text
+    assert 'name="job_post_id"' in body
+    assert "Alpha role" not in body
+
+
+def test_another_users_job_id_cannot_be_smuggled_into_a_run(monkeypatch) -> None:
+    """Picking a foreign id falls through to the form's own job_posting
+    rather than loading that user's saved posting."""
+    foreign = _jobs.create_job_post("Alpha role", POSTING, "user-a")
+
+    seen: dict[str, object] = {}
+
+    def fake_run(data, **_):
+        seen["data"] = data
+        return cover_letter_writer.PAGE.example_output
+
+    monkeypatch.setattr(cover_letter_writer.PAGE, "run", fake_run)
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+
+    resp = b.post(
+        "/p/cover-letter-writer",
+        data={
+            **dict(cover_letter_writer.PAGE.example_form),
+            "job_posting": "b's own posting text",
+            "job_post_id": foreign.id,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["data"].job_posting == "b's own posting text"
+    assert POSTING not in seen["data"].job_posting
 
 
 # --- the screens ---------------------------------------------------------
 
 
 def test_jobs_page_lists_saved(client: TestClient) -> None:
-    _jobs.create_job_post("Acme — Product Lead", POSTING)
+    _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     body = client.get("/jobs").text
     assert "Acme — Product Lead" in body
     assert "Own the roadmap" in body
@@ -112,7 +198,7 @@ def test_create_requires_title_and_posting(client: TestClient) -> None:
     resp = client.post("/jobs/new", data={"title": "", "posting": ""})
     assert resp.status_code == 422
     assert "Title is required." in resp.text
-    assert _jobs.list_job_posts() == []
+    assert _jobs.list_job_posts(USER) == []
 
 
 def test_create_redirects_to_detail(client: TestClient) -> None:
@@ -122,23 +208,23 @@ def test_create_redirects_to_detail(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    job = _jobs.list_job_posts()[0]
+    job = _jobs.list_job_posts(USER)[0]
     assert resp.headers["location"] == f"/jobs/{job.id}"
 
 
 def test_detail_offers_analyse(client: TestClient) -> None:
-    job = _jobs.create_job_post("Acme — Product Lead", POSTING)
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     body = client.get(f"/jobs/{job.id}").text
     assert f'action="/jobs/{job.id}/analyse"' in body
     assert 'name="emphasis"' in body
 
 
 def test_analyse_fills_the_emphasis_list(client: TestClient) -> None:
-    job = _jobs.create_job_post("Acme — Product Lead", POSTING)
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     resp = client.post(f"/jobs/{job.id}/analyse")
     assert resp.status_code == 200, resp.text
 
-    stored = _jobs.get_job_post(job.id).emphasis
+    stored = _jobs.get_job_post(job.id, USER).emphasis
     assert stored.strip(), "analyse should have written an emphasis list"
     assert "\n> " in stored  # quoted spans
     assert "\n- " in stored  # empty note slots for the candidate
@@ -147,8 +233,8 @@ def test_analyse_fills_the_emphasis_list(client: TestClient) -> None:
 def test_analyse_empty_result_keeps_the_emphasis_and_warns(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    job = _jobs.create_job_post("Acme — Product Lead", POSTING)
-    _jobs.update_job_post(job.id, emphasis="My hand-written notes\n- keep these")
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    _jobs.update_job_post(job.id, USER, emphasis="My hand-written notes\n- keep these")
 
     def empty_run(data: job_analyst.Input) -> job_analyst.Output:
         return job_analyst.Output(
@@ -161,11 +247,11 @@ def test_analyse_empty_result_keeps_the_emphasis_and_warns(
     resp = client.post(f"/jobs/{job.id}/analyse")
     assert resp.status_code == 502
     assert "came back empty" in resp.text
-    assert _jobs.get_job_post(job.id).emphasis == "My hand-written notes\n- keep these"
+    assert _jobs.get_job_post(job.id, USER).emphasis == "My hand-written notes\n- keep these"
 
 
 def test_save_persists_annotations(client: TestClient) -> None:
-    job = _jobs.create_job_post("Acme — Product Lead", POSTING)
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     annotated = "Lead with roadmap ownership\n> Own the roadmap\n- I did exactly this at Bract"
     resp = client.post(
         f"/jobs/{job.id}",
@@ -173,14 +259,14 @@ def test_save_persists_annotations(client: TestClient) -> None:
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert _jobs.get_job_post(job.id).emphasis == annotated
+    assert _jobs.get_job_post(job.id, USER).emphasis == annotated
 
 
 def test_delete_through_the_ui(client: TestClient) -> None:
-    job = _jobs.create_job_post("Acme — Product Lead", POSTING)
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     resp = client.post(f"/jobs/{job.id}/delete", follow_redirects=False)
     assert resp.status_code == 303
-    assert _jobs.list_job_posts() == []
+    assert _jobs.list_job_posts(USER) == []
 
 
 def test_unknown_job_is_404(client: TestClient) -> None:
@@ -228,16 +314,16 @@ def test_analysis_text_round_trips_without_notes() -> None:
 
 
 def test_picker_appears_on_the_writer_page(client: TestClient) -> None:
-    _jobs.create_job_post("Acme — Product Lead", POSTING)
+    _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     body = client.get("/p/cover-letter-writer").text
     assert 'name="job_post_id"' in body
     assert "Acme — Product Lead" in body
 
 
 def test_picked_job_post_reaches_the_capability_input(monkeypatch) -> None:
-    job = _jobs.create_job_post("Acme — Product Lead", POSTING)
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     _jobs.update_job_post(
-        job.id,
+        job.id, USER,
         emphasis="Own the roadmap\n> Own the roadmap\n- strong, did this at Bract",
     )
 

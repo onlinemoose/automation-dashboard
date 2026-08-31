@@ -32,6 +32,7 @@ class JobPost:
     posting: str  # the raw job posting text
     emphasis: str  # the annotated emphasis list (">" quote / "-" note format); "" until analysed
     updated_at: datetime | None = None
+    user_id: str = ""  # the Supabase auth.users id that owns this row
 
 
 def _parse_ts(value: object) -> datetime | None:
@@ -44,35 +45,42 @@ def _parse_ts(value: object) -> datetime | None:
 
 
 class _Backend(Protocol):
-    def list(self) -> list[JobPost]: ...
-    def get(self, job_id: str) -> JobPost | None: ...
-    def create(self, title: str, posting: str) -> JobPost: ...
+    def list(self, user_id: str) -> list[JobPost]: ...
+    def get(self, job_id: str, user_id: str) -> JobPost | None: ...
+    def create(self, title: str, posting: str, user_id: str) -> JobPost: ...
     def update(
         self,
         job_id: str,
+        user_id: str,
         *,
         title: str | None = None,
         posting: str | None = None,
         emphasis: str | None = None,
     ) -> JobPost | None: ...
-    def delete(self, job_id: str) -> None: ...
+    def delete(self, job_id: str, user_id: str) -> None: ...
 
 
 class _MemoryBackend:
-    """Non-persistent fallback. Only used when Supabase isn't configured."""
+    """Non-persistent fallback. Only used when Supabase isn't configured.
+
+    Mirrors the Supabase backend's `user_id` filtering exactly: a row
+    belonging to another user is invisible, not merely unlisted.
+    """
 
     def __init__(self) -> None:
         self._jobs: dict[str, JobPost] = {}
         self._seq = 0
         self._lock = threading.Lock()
 
-    def list(self) -> list[JobPost]:
-        return sorted(self._jobs.values(), key=lambda j: j.title.lower())
+    def list(self, user_id: str) -> list[JobPost]:
+        mine = [j for j in self._jobs.values() if j.user_id == user_id]
+        return sorted(mine, key=lambda j: j.title.lower())
 
-    def get(self, job_id: str) -> JobPost | None:
-        return self._jobs.get(job_id)
+    def get(self, job_id: str, user_id: str) -> JobPost | None:
+        job = self._jobs.get(job_id)
+        return job if job is not None and job.user_id == user_id else None
 
-    def create(self, title: str, posting: str) -> JobPost:
+    def create(self, title: str, posting: str, user_id: str) -> JobPost:
         with self._lock:
             self._seq += 1
             job = JobPost(
@@ -81,6 +89,7 @@ class _MemoryBackend:
                 posting=posting,
                 emphasis="",
                 updated_at=datetime.now(timezone.utc),
+                user_id=user_id,
             )
             self._jobs[job.id] = job
             return job
@@ -88,6 +97,7 @@ class _MemoryBackend:
     def update(
         self,
         job_id: str,
+        user_id: str,
         *,
         title: str | None = None,
         posting: str | None = None,
@@ -95,7 +105,9 @@ class _MemoryBackend:
     ) -> JobPost | None:
         with self._lock:
             current = self._jobs.get(job_id)
-            if current is None:
+            # The get-before-merge is scoped too — otherwise a foreign row
+            # would be read, merged, and written back under its own id.
+            if current is None or current.user_id != user_id:
                 return None
             job = JobPost(
                 id=job_id,
@@ -103,12 +115,16 @@ class _MemoryBackend:
                 posting=current.posting if posting is None else posting,
                 emphasis=current.emphasis if emphasis is None else emphasis,
                 updated_at=datetime.now(timezone.utc),
+                user_id=current.user_id,  # the rebuilt row keeps its owner
             )
             self._jobs[job_id] = job
             return job
 
-    def delete(self, job_id: str) -> None:
-        self._jobs.pop(job_id, None)
+    def delete(self, job_id: str, user_id: str) -> None:
+        with self._lock:
+            current = self._jobs.get(job_id)
+            if current is not None and current.user_id == user_id:
+                del self._jobs[job_id]
 
 
 class _SupabaseBackend:
@@ -128,24 +144,37 @@ class _SupabaseBackend:
             posting=row.get("posting") or "",
             emphasis=row.get("emphasis") or "",
             updated_at=_parse_ts(row.get("updated_at")),
+            user_id=row.get("user_id") or "",
         )
 
-    def list(self) -> list[JobPost]:
-        res = self._table().select("*").order("title").execute()
+    def list(self, user_id: str) -> list[JobPost]:
+        res = self._table().select("*").eq("user_id", user_id).order("title").execute()
         return [self._row(r) for r in (res.data or [])]
 
-    def get(self, job_id: str) -> JobPost | None:
-        res = self._table().select("*").eq("id", job_id).limit(1).execute()
+    def get(self, job_id: str, user_id: str) -> JobPost | None:
+        res = (
+            self._table()
+            .select("*")
+            .eq("id", job_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
         rows = res.data or []
         return self._row(rows[0]) if rows else None
 
-    def create(self, title: str, posting: str) -> JobPost:
-        res = self._table().insert({"title": title, "posting": posting}).execute()
+    def create(self, title: str, posting: str, user_id: str) -> JobPost:
+        res = (
+            self._table()
+            .insert({"title": title, "posting": posting, "user_id": user_id})
+            .execute()
+        )
         return self._row((res.data or [{}])[0])
 
     def update(
         self,
         job_id: str,
+        user_id: str,
         *,
         title: str | None = None,
         posting: str | None = None,
@@ -158,12 +187,18 @@ class _SupabaseBackend:
             payload["posting"] = posting
         if emphasis is not None:
             payload["emphasis"] = emphasis
-        res = self._table().update(payload).eq("id", job_id).execute()
+        res = (
+            self._table()
+            .update(payload)
+            .eq("id", job_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
         rows = res.data or []
         return self._row(rows[0]) if rows else None
 
-    def delete(self, job_id: str) -> None:
-        self._table().delete().eq("id", job_id).execute()
+    def delete(self, job_id: str, user_id: str) -> None:
+        self._table().delete().eq("id", job_id).eq("user_id", user_id).execute()
 
 
 _backend: _Backend | None = None
@@ -200,29 +235,36 @@ def reset() -> None:
 
 
 # --- public API: thin pass-throughs to the chosen backend ----------------
+#
+# Every one of these takes the owning user's id as its last required
+# argument, with no default — a missed call site is a loud TypeError at
+# import/collection time rather than a silent cross-user read.
 
 
-def list_job_posts() -> list[JobPost]:
-    return _store().list()
+def list_job_posts(user_id: str) -> list[JobPost]:
+    return _store().list(user_id)
 
 
-def get_job_post(job_id: str) -> JobPost | None:
-    return _store().get(job_id)
+def get_job_post(job_id: str, user_id: str) -> JobPost | None:
+    return _store().get(job_id, user_id)
 
 
-def create_job_post(title: str, posting: str) -> JobPost:
-    return _store().create(title, posting)
+def create_job_post(title: str, posting: str, user_id: str) -> JobPost:
+    return _store().create(title, posting, user_id)
 
 
 def update_job_post(
     job_id: str,
+    user_id: str,
     *,
     title: str | None = None,
     posting: str | None = None,
     emphasis: str | None = None,
 ) -> JobPost | None:
-    return _store().update(job_id, title=title, posting=posting, emphasis=emphasis)
+    return _store().update(
+        job_id, user_id, title=title, posting=posting, emphasis=emphasis
+    )
 
 
-def delete_job_post(job_id: str) -> None:
-    _store().delete(job_id)
+def delete_job_post(job_id: str, user_id: str) -> None:
+    _store().delete(job_id, user_id)
