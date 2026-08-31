@@ -568,8 +568,9 @@ def create_app(
         text = str(form.get("text") or "")
         if not page_slug or not section or not text.strip():
             raise HTTPException(status_code=422, detail="slug, section and text are required")
+        uid = _auth.current_user_id(request)
         draft = await run_in_threadpool(
-            _drafts.create_or_get_draft, page_slug, section, text
+            _drafts.create_or_get_draft, page_slug, section, text, uid
         )
         return RedirectResponse(f"/drafts/{draft.id}", status_code=303)
 
@@ -577,7 +578,8 @@ def create_app(
     async def draft_edit(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
         if draft is None:
             raise HTTPException(status_code=404)
         return render(
@@ -591,7 +593,8 @@ def create_app(
     async def draft_revise(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
         if draft is None:
             raise HTTPException(status_code=404)
         form = await request.form()
@@ -642,7 +645,8 @@ def create_app(
     async def draft_accept(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
         if draft is None:
             raise HTTPException(status_code=404)
         form = await request.form()
@@ -671,6 +675,7 @@ def create_app(
         updated = await run_in_threadpool(
             lambda: _drafts.record_revision(
                 draft_id,
+                uid,
                 instruction=instruction,
                 selection=selection,
                 span_start=span_start,
@@ -688,7 +693,8 @@ def create_app(
     async def draft_undo(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        updated = await run_in_threadpool(_drafts.undo_last, draft_id)
+        uid = _auth.current_user_id(request)
+        updated = await run_in_threadpool(_drafts.undo_last, draft_id, uid)
         if updated is None:
             raise HTTPException(status_code=404)
         return JSONResponse(_draft_state(updated))
@@ -697,7 +703,8 @@ def create_app(
     async def draft_download(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
         if draft is None:
             raise HTTPException(status_code=404)
         name = f"{draft.slug}-{draft.section}".strip("-") or "draft"

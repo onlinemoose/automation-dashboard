@@ -17,6 +17,10 @@ from starlette.testclient import TestClient
 from dashboard import _drafts
 from dashboard.app import create_app
 
+# Must match `create_app`'s default `as_user` — the id the app scopes by
+# when auth is disabled.
+USER = "test-user"
+
 SLUG = "cover-letter-writer"
 SECTION = "cover-letter"
 TEXT = "The quick brown fox jumps over the lazy dog.\n\nA second paragraph follows here."
@@ -87,24 +91,73 @@ def test_replay_reproduces_current_from_original():
 
 
 def test_create_or_get_dedupes_on_slug_section_and_hash():
-    a = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
-    b = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    a = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    b = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     assert a.id == b.id
     assert a.original == a.current == TEXT
     assert a.revisions == []
 
     # different text -> different draft
-    c = _drafts.create_or_get_draft(SLUG, SECTION, TEXT + " more")
+    c = _drafts.create_or_get_draft(SLUG, SECTION, TEXT + " more", USER)
     assert c.id != a.id
     # different section -> different draft
-    d = _drafts.create_or_get_draft(SLUG, "targeting-note", TEXT)
+    d = _drafts.create_or_get_draft(SLUG, "targeting-note", TEXT, USER)
     assert d.id != a.id
+    # different user, same (slug, section, text) -> a different draft.
+    # Miss the owner in the lookup and B lands on A's draft, revisions
+    # and all.
+    e = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, "someone-else")
+    assert e.id != a.id
+    assert e.user_id == "someone-else"
+
+
+def test_drafts_are_scoped_to_the_user():
+    """Another user's draft is unreadable and unwritable at the store level."""
+    mine = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, "user-a")
+
+    assert _drafts.get_draft(mine.id, "user-b") is None
+    assert _drafts.undo_last(mine.id, "user-b") is None
+    assert _drafts.record_revision(
+        mine.id, "user-b",
+        instruction="hijack", selection="fox", span_start=TEXT.index("fox"),
+        span_len=3, revised="OWNED", note="", cost={},
+    ) is None
+
+    still = _drafts.get_draft(mine.id, "user-a")
+    assert still is not None
+    assert still.current == TEXT
+    assert still.revisions == []
+
+
+def test_another_users_draft_is_404_over_http():
+    """Each draft route already 404s on a None fetch, so scoping the fetch
+    gives 404-not-403 for free — no separate forbidden path."""
+    mine = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, "user-a")
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+
+    assert b.get(f"/drafts/{mine.id}").status_code == 404
+    assert b.get(f"/drafts/{mine.id}/download").status_code == 404
+    assert b.post(f"/drafts/{mine.id}/undo").status_code == 404
+    assert b.post(
+        f"/drafts/{mine.id}/revise",
+        data={"selection": "fox", "instruction": "shout",
+              "span_start": TEXT.index("fox"), "span_len": 3},
+    ).status_code == 404
+    assert b.post(
+        f"/drafts/{mine.id}/accept",
+        data={"selection": "fox", "revised": "OWNED", "instruction": "shout",
+              "note": "", "span_start": TEXT.index("fox"), "span_len": 3, "cost": "{}"},
+    ).status_code == 404
+
+    still = _drafts.get_draft(mine.id, "user-a")
+    assert still.current == TEXT
+    assert still.revisions == []
 
 
 def test_record_revision_appends_and_resplices():
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     updated = _drafts.record_revision(
-        draft.id,
+        draft.id, USER,
         instruction="shout the animal",
         selection="fox",
         span_start=TEXT.index("fox"),
@@ -117,34 +170,34 @@ def test_record_revision_appends_and_resplices():
     assert len(updated.revisions) == 1
     assert updated.revisions[0].instruction == "shout the animal"
     # original is never mutated
-    assert _drafts.get_draft(draft.id).original == TEXT
+    assert _drafts.get_draft(draft.id, USER).original == TEXT
 
 
 def test_undo_replays_to_the_prior_state():
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     _drafts.record_revision(
-        draft.id, instruction="a", selection="quick", span_start=TEXT.index("quick"),
+        draft.id, USER, instruction="a", selection="quick", span_start=TEXT.index("quick"),
         span_len=5, revised="QUICK", note="", cost={},
     )
-    after_one = _drafts.get_draft(draft.id).current
+    after_one = _drafts.get_draft(draft.id, USER).current
     _drafts.record_revision(
-        draft.id, instruction="b", selection="dog", span_start=after_one.index("dog"),
+        draft.id, USER, instruction="b", selection="dog", span_start=after_one.index("dog"),
         span_len=3, revised="DOG", note="", cost={},
     )
-    assert _drafts.get_draft(draft.id).current == after_one.replace("dog", "DOG", 1)
+    assert _drafts.get_draft(draft.id, USER).current == after_one.replace("dog", "DOG", 1)
 
-    back = _drafts.undo_last(draft.id)
+    back = _drafts.undo_last(draft.id, USER)
     assert back.current == after_one
     assert len(back.revisions) == 1
 
-    back = _drafts.undo_last(draft.id)
+    back = _drafts.undo_last(draft.id, USER)
     assert back.current == TEXT
     assert back.revisions == []
 
 
 def test_undo_with_no_revisions_is_a_noop():
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
-    back = _drafts.undo_last(draft.id)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    back = _drafts.undo_last(draft.id, USER)
     assert back.current == TEXT
     assert back.revisions == []
 
@@ -170,14 +223,14 @@ def test_open_draft_redirects_to_the_editor(client: TestClient):
 
 
 def test_editor_page_renders_the_current_text(client: TestClient):
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     body = client.get(f"/drafts/{draft.id}").text
     assert "quick brown fox" in body
     assert "draft-edit.js" in body
 
 
 def test_revise_returns_a_proposal_without_mutating(client: TestClient):
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     start = TEXT.index("quick brown")
     resp = client.post(
         f"/drafts/{draft.id}/revise",
@@ -194,12 +247,12 @@ def test_revise_returns_a_proposal_without_mutating(client: TestClient):
     assert data["note"]
     assert data["cost"]["usd"] == 0.0012
     # the draft itself is untouched
-    assert _drafts.get_draft(draft.id).current == TEXT
-    assert _drafts.get_draft(draft.id).revisions == []
+    assert _drafts.get_draft(draft.id, USER).current == TEXT
+    assert _drafts.get_draft(draft.id, USER).revisions == []
 
 
 def test_revise_rejects_a_selection_that_is_gone(client: TestClient):
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     resp = client.post(
         f"/drafts/{draft.id}/revise",
         data={"selection": "not there", "span_start": 0, "span_len": 9, "instruction": "x"},
@@ -211,7 +264,7 @@ def test_revise_rejects_a_selection_that_is_gone(client: TestClient):
 def test_revise_recovers_when_offsets_are_off_but_the_text_is_present(client: TestClient):
     # A <pre> can shift character offsets (leading newline, CRLF). If the
     # selection text still occurs exactly once, the route locates it.
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     resp = client.post(
         f"/drafts/{draft.id}/revise",
         data={
@@ -228,7 +281,7 @@ def test_revise_recovers_when_offsets_are_off_but_the_text_is_present(client: Te
 
 
 def test_revise_requires_an_instruction(client: TestClient):
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     start = TEXT.index("quick")
     resp = client.post(
         f"/drafts/{draft.id}/revise",
@@ -238,7 +291,7 @@ def test_revise_requires_an_instruction(client: TestClient):
 
 
 def test_accept_mutates_and_appends_history(client: TestClient):
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     start = TEXT.index("quick brown")
     resp = client.post(
         f"/drafts/{draft.id}/accept",
@@ -256,14 +309,14 @@ def test_accept_mutates_and_appends_history(client: TestClient):
     assert resp.json()["revision_count"] == 1
     assert resp.json()["can_undo"] is True
 
-    stored = _drafts.get_draft(draft.id)
+    stored = _drafts.get_draft(draft.id, USER)
     assert stored.current == TEXT.replace("quick brown", "QUICK BROWN", 1)
     assert stored.revisions[0].note == "upper-cased"
     assert stored.revisions[0].cost["usd"] == 0.0012
 
 
 def test_accept_then_undo_route_reverts(client: TestClient):
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     start = TEXT.index("fox")
     client.post(
         f"/drafts/{draft.id}/accept",
@@ -272,17 +325,17 @@ def test_accept_then_undo_route_reverts(client: TestClient):
             "instruction": "shout", "revised": "FOX", "note": "", "cost": "{}",
         },
     )
-    assert _drafts.get_draft(draft.id).current != TEXT
+    assert _drafts.get_draft(draft.id, USER).current != TEXT
     resp = client.post(f"/drafts/{draft.id}/undo")
     assert resp.status_code == 200
     assert resp.json()["revision_count"] == 0
-    assert _drafts.get_draft(draft.id).current == TEXT
+    assert _drafts.get_draft(draft.id, USER).current == TEXT
 
 
 def test_download_returns_the_current_markdown(client: TestClient):
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     _drafts.record_revision(
-        draft.id, instruction="x", selection="fox", span_start=TEXT.index("fox"),
+        draft.id, USER, instruction="x", selection="fox", span_start=TEXT.index("fox"),
         span_len=3, revised="FOX", note="", cost={},
     )
     resp = client.get(f"/drafts/{draft.id}/download")
@@ -307,7 +360,7 @@ def test_drafts_area_requires_auth():
 
 def test_stub_mode_revise_returns_a_canned_proposal():
     stub = TestClient(create_app(auth_disabled=True, stub_runs=True))
-    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
     start = TEXT.index("quick")
     resp = stub.post(
         f"/drafts/{draft.id}/revise",
