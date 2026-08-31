@@ -118,11 +118,10 @@ button:hover, .button:hover { filter: brightness(1.05); }
 /* --- working-draft editor (docs/DRAFTS.md) --- */
 .panel.draft { max-width: 58rem; }
 .draft__toolbar {
-  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  display: flex; justify-content: flex-end;
   margin: 1.5rem 0 0.75rem;
 }
-.draft__toolbar button, .draft__toolbar .button { margin-top: 0; }
-.draft__count { font-size: 0.85rem; color: var(--ink-soft); margin-left: auto; }
+.draft__toolbar .button { margin: 0; }
 .draft__doc {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -205,7 +204,10 @@ button:hover, .button:hover { filter: brightness(1.05); }
   .draft__diff ins { background: #234a3d; }
 }
 .draft__busy { font-size: 0.9rem; color: var(--ink-soft); }
-.draft__history { margin: 0.5rem 0 0; padding-left: 1.25rem; font-size: 0.9rem; }
+.draft__history-wrap { margin-top: 2rem; }
+.draft__history-wrap h2 { margin-bottom: 0.5rem; }
+.draft__history-wrap #draft-undo { margin: 0 0 1rem; }
+.draft__history { margin: 0; padding-left: 1.25rem; font-size: 0.9rem; }
 .draft__history li { padding: 0.2rem 0; }
 .draft__history-note { display: block; color: var(--ink-soft); }
 .draft #draft-runmeta { margin-top: 1rem; }

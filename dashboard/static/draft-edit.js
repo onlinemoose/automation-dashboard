@@ -34,7 +34,7 @@
   var errorEl = document.getElementById("draft-error");
   var busyEl = document.getElementById("draft-busy");
   var undoBtn = document.getElementById("draft-undo");
-  var countEl = document.getElementById("draft-count");
+  var historyWrap = document.getElementById("draft-history-wrap");
 
   var pending = null; // {start, len, selection} while a span is being worked
   var lastProposal = null; // {revised, note, cost}
@@ -285,7 +285,6 @@
           note: lastProposal.note || "",
         };
         doc.textContent = res.data.current;
-        updateCount(res.data.revision_count);
         undoBtn.disabled = !res.data.can_undo;
         addHistory(accepted);
         closeWork();
@@ -316,23 +315,12 @@
     });
   }
 
-  // --- history / count -------------------------------------------------
-
-  function updateCount(n) {
-    countEl.textContent = n + " revision" + (n === 1 ? "" : "s");
-  }
+  // --- history -----------------------------------------------------
 
   function addHistory(entry) {
+    if (historyWrap) historyWrap.hidden = false;
     var list = document.getElementById("draft-history");
-    if (!list) {
-      var h = document.createElement("h2");
-      h.textContent = "History";
-      list = document.createElement("ol");
-      list.className = "draft__history";
-      list.id = "draft-history";
-      root.appendChild(h);
-      root.appendChild(list);
-    }
+    if (!list) return;
     var li = document.createElement("li");
     var ins = document.createElement("span");
     ins.className = "draft__history-instruction";

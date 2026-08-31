@@ -14,11 +14,7 @@
   </p>
 
   <div class="draft__toolbar">
-    <button type="button" id="draft-undo" {% if not draft.revisions %}disabled{% endif %}>Undo last</button>
     <a class="button button--ghost" href="/drafts/{{ draft.id }}/download">Download .md</a>
-    <span class="draft__count" id="draft-count">
-      {{ draft.revisions | length }} revision{{ "" if draft.revisions | length == 1 else "s" }}
-    </span>
   </div>
 
   {# The newline right after <pre> is swallowed by the browser (HTML rule),
@@ -66,17 +62,18 @@
     <p class="draft__busy" id="draft-busy" hidden>Revising… this can take up to a minute.</p>
   </div>
 
-  {% if draft.revisions %}
-  <h2>History</h2>
-  <ol class="draft__history" id="draft-history">
-    {% for rev in draft.revisions %}
-    <li>
-      <span class="draft__history-instruction">{{ rev.instruction }}</span>
-      {% if rev.note %}<span class="draft__history-note">{{ rev.note }}</span>{% endif %}
-    </li>
-    {% endfor %}
-  </ol>
-  {% endif %}
+  <div class="draft__history-wrap" id="draft-history-wrap" {% if not draft.revisions %}hidden{% endif %}>
+    <h2>History</h2>
+    <button type="button" id="draft-undo" {% if not draft.revisions %}disabled{% endif %}>Undo last</button>
+    <ol class="draft__history" id="draft-history">
+      {% for rev in draft.revisions %}
+      <li>
+        <span class="draft__history-instruction">{{ rev.instruction }}</span>
+        {% if rev.note %}<span class="draft__history-note">{{ rev.note }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
 </section>
 <script src="/static/draft-edit.js?v={{ asset_v }}"></script>
 {% endblock %}
