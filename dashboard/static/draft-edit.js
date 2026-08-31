@@ -21,6 +21,7 @@
   var instruction = document.getElementById("draft-instruction");
   var proposeBtn = document.getElementById("draft-propose");
   var cancelBtn = document.getElementById("draft-cancel");
+  var closeBtn = document.getElementById("draft-close");
   var proposal = document.getElementById("draft-proposal");
   var diffEl = document.getElementById("draft-diff");
   var noteEl = document.getElementById("draft-note");
@@ -154,6 +155,10 @@
 
   cancelBtn.addEventListener("click", closeWork);
   rejectBtn.addEventListener("click", closeWork);
+  if (closeBtn) closeBtn.addEventListener("click", closeWork);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !work.hidden) closeWork();
+  });
 
   // --- proposing a revision -------------------------------------------
 

@@ -29,8 +29,11 @@
 
   <button type="button" class="draft__revise-btn" id="draft-revise-btn" hidden>Revise…</button>
 
-  <div class="draft__work" id="draft-work" hidden>
-    <h2 id="draft-work-title">Revise this span</h2>
+  <div class="draft__work" id="draft-work" role="dialog" aria-labelledby="draft-work-title" hidden>
+    <div class="draft__work-head">
+      <h2 id="draft-work-title">Revise this span</h2>
+      <button type="button" class="draft__close" id="draft-close" aria-label="Close">&times;</button>
+    </div>
     <blockquote class="draft__selection" id="draft-selection"></blockquote>
 
     <div id="draft-ask">
