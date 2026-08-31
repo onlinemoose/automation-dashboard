@@ -9,6 +9,7 @@ See `docs/BACKGROUND_DOCUMENTS.md` and `docs/JOB_POSTS.md`.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
@@ -32,6 +33,18 @@ from dashboard.pages._spec import FormError, Page, RunMeta
 _HERE = Path(__file__).resolve().parent
 _TEMPLATES = _HERE / "templates"
 _STATIC = _HERE / "static"
+
+
+def _asset_version() -> str:
+    """Short hash of the static assets, appended as `?v=` to their URLs so
+    a browser fetches the new file after a deploy instead of a stale cache."""
+    h = hashlib.sha1()
+    for name in ("app.css", "draft-edit.js"):
+        try:
+            h.update((_STATIC / name).read_bytes())
+        except OSError:
+            pass
+    return h.hexdigest()[:8]
 
 
 def _wants_documents(page: Page) -> bool:
@@ -86,6 +99,7 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     templates.env.filters["thousands"] = lambda n: f"{int(n):,}"
     templates.env.filters["usd4"] = lambda n: f"${float(n):.4f}"
     templates.env.globals["stub_runs"] = app.state.stub_runs
+    templates.env.globals["asset_v"] = _asset_version()
 
     def render(name: str, request: Request, /, status_code: int = 200, **ctx):
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)

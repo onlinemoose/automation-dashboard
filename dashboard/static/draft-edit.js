@@ -72,6 +72,8 @@
   }
 
   function positionReviseBtn(range, evt) {
+    // The button is position:fixed, so these are viewport coordinates —
+    // no scroll math, and it doesn't matter what the ancestors are.
     var rect = range.getBoundingClientRect();
     if ((!rect || (rect.width === 0 && rect.height === 0)) && range.getClientRects) {
       var rects = range.getClientRects();
@@ -79,14 +81,17 @@
     }
     var top, left;
     if (rect && (rect.width || rect.height)) {
-      top = window.scrollY + rect.bottom + 6;
-      left = window.scrollX + rect.left;
+      top = rect.bottom + 6;
+      left = rect.left;
     } else if (evt) {
-      top = evt.pageY + 12;
-      left = evt.pageX;
+      top = evt.clientY + 12;
+      left = evt.clientX;
     } else {
       return false;
     }
+    // keep it inside the viewport
+    left = Math.max(8, Math.min(left, window.innerWidth - 96));
+    top = Math.max(8, Math.min(top, window.innerHeight - 44));
     reviseBtn.style.top = top + "px";
     reviseBtn.style.left = left + "px";
     return true;

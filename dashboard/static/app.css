@@ -112,18 +112,20 @@ button:hover, .button:hover { filter: brightness(1.05); }
 .result__head .result__edit + .button--ghost { margin-left: 0.5rem; }
 
 /* --- working-draft editor (docs/DRAFTS.md) --- */
+.panel.draft { max-width: 58rem; }
 .draft__toolbar {
-  display: flex; align-items: center; gap: 0.75rem;
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
   margin: 1.5rem 0 0.75rem;
 }
 .draft__toolbar button, .draft__toolbar .button { margin-top: 0; }
 .draft__count { font-size: 0.85rem; color: var(--ink-soft); margin-left: auto; }
 .draft__doc {
-  white-space: pre-wrap; word-wrap: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 1rem;
-  font: 0.95rem/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  max-height: 60vh; overflow-y: auto;
+  font: 0.8125rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  max-height: 62vh; overflow: auto;
 }
 .draft__doc::selection, .draft__doc ::selection { background: #b9d9cd; }
 @media (prefers-color-scheme: dark) {
@@ -131,8 +133,8 @@ button:hover, .button:hover { filter: brightness(1.05); }
 }
 .draft__doc--locked { outline: 2px solid var(--accent); outline-offset: 2px; }
 .draft__revise-btn {
-  position: absolute; margin: 0; padding: 0.35rem 0.7rem; font-size: 0.85rem;
-  z-index: 10;
+  position: fixed; margin: 0; padding: 0.35rem 0.7rem; font-size: 0.85rem;
+  z-index: 50; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .draft__work {
   margin: 1rem 0 0; padding: 1rem;
