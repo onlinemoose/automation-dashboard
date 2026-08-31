@@ -338,6 +338,16 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         if job is None:
             raise HTTPException(status_code=404)
         analysis = await run_in_threadpool(_job_analysis.analyse, job.posting)
+        if not analysis.requirements:
+            # The capability returned nothing usable (e.g. a model reply its
+            # normaliser couldn't recover). Leave the emphasis list alone —
+            # overwriting it with a blank loses the user's annotations for
+            # nothing — and say so instead of rendering an empty result.
+            return render(
+                "job_detail.html", request, status_code=502,
+                job=job, values={}, errors={}, summary=None, meta=None,
+                notice="The analysis came back empty — nothing was changed. Try again.",
+            )
         text = _job_analysis.requirements_to_emphasis_text(analysis)
         updated = await run_in_threadpool(_jobs.update_job_post, job_id, emphasis=text)
         cost = analysis.cost

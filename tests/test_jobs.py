@@ -144,6 +144,26 @@ def test_analyse_fills_the_emphasis_list(client: TestClient) -> None:
     assert "\n- " in stored  # empty note slots for the candidate
 
 
+def test_analyse_empty_result_keeps_the_emphasis_and_warns(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING)
+    _jobs.update_job_post(job.id, emphasis="My hand-written notes\n- keep these")
+
+    def empty_run(data: job_analyst.Input) -> job_analyst.Output:
+        return job_analyst.Output(
+            requirements=[], summary="", reading_between_the_lines=[],
+            cost=job_analyst.Cost(0.0, 0, 0, 0, 0),
+        )
+
+    monkeypatch.setattr(job_analyst, "run", empty_run)
+
+    resp = client.post(f"/jobs/{job.id}/analyse")
+    assert resp.status_code == 502
+    assert "came back empty" in resp.text
+    assert _jobs.get_job_post(job.id).emphasis == "My hand-written notes\n- keep these"
+
+
 def test_save_persists_annotations(client: TestClient) -> None:
     job = _jobs.create_job_post("Acme — Product Lead", POSTING)
     annotated = "Lead with roadmap ownership\n> Own the roadmap\n- I did exactly this at Bract"

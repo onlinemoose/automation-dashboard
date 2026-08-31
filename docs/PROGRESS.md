@@ -3,6 +3,25 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-31 — Job analyse: guard the empty-result case
+
+A German CPO posting analysed to nothing: the `job-analyst` model reply
+came back with the whole analysis nested one level down
+(`{"analysis": {…}}`), a shape the capability's `_normalise_payload`
+didn't recover, so `run()` returned an empty `Output`. The analyse route
+then overwrote the emphasis list with a blank and rendered an empty page.
+
+- **Fix in the capability** (`../job-analyst`, not this repo — it's
+  domain logic): `_normalise_payload` now also unwraps a plain dict
+  nested under a wrapper key, alongside the JSON-string shapes it already
+  handled. Not language-specific; the German analysis itself was fine.
+  Still a local path override here — not yet tagged/pushed.
+- **Guard here** — `POST /jobs/{id}/analyse`: when `analysis.requirements`
+  is empty, the route no longer touches the stored emphasis. It returns
+  `502` and re-renders the detail page with a `notice` ("came back empty
+  — nothing was changed. Try again."). New `notice` slot in
+  `job_detail.html`; covered by `test_analyse_empty_result_keeps_the_emphasis_and_warns`.
+
 ## 2026-08-31 — Targeted revision: edit one span of a result draft
 
 Branch `targeted-revision`. A capability result section can now be opened
