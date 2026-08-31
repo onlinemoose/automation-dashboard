@@ -32,8 +32,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
-from dashboard import _documents, _drafts, _job_analysis, _jobs, _targeted_edit
-from dashboard._auth import is_authed, password_hash, verify_password
+from dashboard import _auth, _documents, _drafts, _job_analysis, _jobs, _targeted_edit
+from dashboard._auth import is_authed
 from dashboard._render import to_html
 from dashboard.pages import PAGES, PAGES_BY_SLUG
 from dashboard.pages._spec import FormError, Page, RunMeta
@@ -115,9 +115,17 @@ def _session_secret() -> str:
     return value
 
 
-def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastAPI:
+def create_app(
+    *,
+    auth_disabled: bool = False,
+    stub_runs: bool = False,
+    as_user: str = "test-user",
+) -> FastAPI:
     app = FastAPI(title="Automation Dashboard")
     app.state.auth_disabled = auth_disabled
+    # Who every request is from while `auth_disabled` — the synthetic id the
+    # app's own stores scope by. Tests set it to check cross-user isolation.
+    app.state.as_user = as_user
     # Stub mode: skip the capability call, render its `example_output`. Lets
     # you click through the whole app with no API key, no cost, no wait.
     app.state.stub_runs = stub_runs or os.environ.get("DASHBOARD_STUB_RUNS", "0") == "1"
@@ -137,6 +145,12 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     templates.env.globals["asset_v"] = _asset_version()
 
     def render(name: str, request: Request, /, status_code: int = 200, **ctx):
+        # Every page's topbar shows who is signed in — inject it once here
+        # rather than in each handler. `_streamed_result` bypasses this and
+        # passes `user_email` explicitly.
+        ctx.setdefault(
+            "user_email", u.email if (u := _auth.current_user(request)) else None
+        )
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
     def guard(request: Request) -> RedirectResponse | None:
@@ -152,16 +166,23 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
 
     @app.get("/login", response_class=HTMLResponse)
     def login_form(request: Request, next: str = "/"):
-        return render("login.html", request, next=next, error=None)
+        return render("login.html", request, next=next, email="", error=None)
 
     @app.post("/login", response_class=HTMLResponse)
     async def login_submit(request: Request):
         form = await request.form()
         next_url = str(form.get("next") or "/")
-        if password_hash() and verify_password(str(form.get("password") or ""), password_hash()):
-            request.session["authed"] = True
+        email = str(form.get("email") or "").strip()
+        password = str(form.get("password") or "")
+        # Supabase Auth is a network call; keep it off the event loop.
+        user = await run_in_threadpool(_auth.sign_in, email, password)
+        if user is not None:
+            request.session["user"] = {"id": user.id, "email": user.email}
             return RedirectResponse(next_url, status_code=303)
-        return render("login.html", request, status_code=401, next=next_url, error="Wrong password.")
+        return render(
+            "login.html", request, status_code=401,
+            next=next_url, email=email, error="Wrong email or password.",
+        )
 
     @app.get("/logout")
     def logout(request: Request):
@@ -204,9 +225,12 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         body, not as a 5xx.
         """
         tpl = templates.get_template
+        # These three render outside `render()`, so the topbar's signed-in
+        # email has to be passed in by hand.
+        user_email = u.email if (u := _auth.current_user(request)) else None
 
         async def body():
-            yield tpl("_running_open.html").render(page=page)
+            yield tpl("_running_open.html").render(page=page, user_email=user_email)
 
             loop = asyncio.get_running_loop()
             updates: asyncio.Queue[int] = asyncio.Queue()
@@ -241,11 +265,14 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
                 output = task.result()
             except Exception as exc:  # noqa: BLE001 - any run() failure, shown in the body
                 _log.exception("slow page %s: run() failed", page.slug)
-                yield tpl("_running_error.html").render(page=page, error=type(exc).__name__)
+                yield tpl("_running_error.html").render(
+                    page=page, error=type(exc).__name__, user_email=user_email,
+                )
                 return
             meta = page.run_meta(output) if page.run_meta else None
             yield tpl("_running_close.html").render(
                 page=page, sections=page.sections(output), meta=meta,
+                user_email=user_email,
             )
 
         return StreamingResponse(

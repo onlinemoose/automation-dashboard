@@ -59,9 +59,15 @@ def password_hash() -> str:
 
 
 def is_authed(request: Request) -> bool:
+    """Whether this request carries a signed-in session.
+
+    Reads the same key `login_submit` writes. A cookie from before user
+    accounts holds `authed` but no `user`, so it reads as signed out —
+    one redirect to /login, then it is replaced.
+    """
     if getattr(request.app.state, "auth_disabled", False):
         return True
-    return bool(request.session.get("authed"))
+    return request.session.get("user") is not None
 
 
 # --- who is signed in -----------------------------------------------------
