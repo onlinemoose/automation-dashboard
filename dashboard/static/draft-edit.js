@@ -40,6 +40,9 @@
 
   // --- selecting a span ---------------------------------------------------
 
+  // Character offset from the start of the doc text to a (node, offset)
+  // boundary. Works whether the boundary node is the <pre>'s text node or
+  // the <pre> element itself.
   function offsetWithin(node, nodeOffset) {
     var r = document.createRange();
     r.setStart(doc, 0);
@@ -47,29 +50,57 @@
     return r.toString().length;
   }
 
-  function onMouseUp() {
-    if (pending) return; // one edit at a time — ignore new selections
+  // The selection's start/end as offsets into the doc text, clamped to the
+  // doc if a drag ran past its edge. null if the selection doesn't touch
+  // the doc at all.
+  function selectionOffsets() {
     var sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-      hide(reviseBtn);
-      return;
-    }
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
     var range = sel.getRangeAt(0);
-    if (!doc.contains(range.startContainer) || !doc.contains(range.endContainer)) {
-      hide(reviseBtn);
-      return;
+    var len = doc.textContent.length;
+    var startIn = doc.contains(range.startContainer);
+    var endIn = doc.contains(range.endContainer);
+    if (!startIn && !endIn) return null; // selection is entirely elsewhere
+    var start = startIn ? offsetWithin(range.startContainer, range.startOffset) : 0;
+    var end = endIn ? offsetWithin(range.endContainer, range.endOffset) : len;
+    if (start > end) {
+      var t = start;
+      start = end;
+      end = t;
     }
-    var start = offsetWithin(range.startContainer, range.startOffset);
-    var end = offsetWithin(range.endContainer, range.endOffset);
-    if (end <= start || !doc.textContent.slice(start, end).trim()) {
-      hide(reviseBtn);
-      return;
-    }
-    pendingCandidate = { start: start, len: end - start };
+    return { start: start, end: end, range: range };
+  }
+
+  function positionReviseBtn(range, evt) {
     var rect = range.getBoundingClientRect();
-    reviseBtn.style.top = window.scrollY + rect.bottom + 6 + "px";
-    reviseBtn.style.left = window.scrollX + rect.left + "px";
-    show(reviseBtn);
+    if ((!rect || (rect.width === 0 && rect.height === 0)) && range.getClientRects) {
+      var rects = range.getClientRects();
+      if (rects.length) rect = rects[rects.length - 1];
+    }
+    var top, left;
+    if (rect && (rect.width || rect.height)) {
+      top = window.scrollY + rect.bottom + 6;
+      left = window.scrollX + rect.left;
+    } else if (evt) {
+      top = evt.pageY + 12;
+      left = evt.pageX;
+    } else {
+      return false;
+    }
+    reviseBtn.style.top = top + "px";
+    reviseBtn.style.left = left + "px";
+    return true;
+  }
+
+  function onSelectionSettled(evt) {
+    if (pending) return; // one edit at a time — ignore new selections
+    var off = selectionOffsets();
+    if (!off || off.end <= off.start || !doc.textContent.slice(off.start, off.end).trim()) {
+      hide(reviseBtn);
+      return;
+    }
+    pendingCandidate = { start: off.start, len: off.end - off.start };
+    if (positionReviseBtn(off.range, evt)) show(reviseBtn);
   }
 
   var pendingCandidate = null;
@@ -362,7 +393,21 @@
     return out;
   }
 
-  doc.addEventListener("mouseup", onMouseUp);
+  // Listen on the document, not just the <pre>: a drag-select often ends
+  // with the mouseup outside the element. Defer a tick so the browser has
+  // finalised the selection.
+  document.addEventListener("mouseup", function (e) {
+    setTimeout(function () {
+      onSelectionSettled(e);
+    }, 0);
+  });
+  document.addEventListener("keyup", function (e) {
+    if (e.shiftKey || e.key === "Shift" || /^Arrow|Home|End/.test(e.key || "")) {
+      setTimeout(function () {
+        onSelectionSettled(null);
+      }, 0);
+    }
+  });
   document.addEventListener("mousedown", function (e) {
     if (e.target !== reviseBtn) hide(reviseBtn);
   });
