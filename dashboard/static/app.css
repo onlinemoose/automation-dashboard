@@ -7,14 +7,15 @@
   --panel: #ffffff;
   --line: #e2e0da;
   --accent: #2b5c4b;
-  --error: #a3341f;
+  --red: #a3341f;          /* the one place to change the "danger" colour */
+  --error: var(--red);    /* alias, kept so older rules keep working */
   --radius: 6px;
   --measure: 46rem;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --ink: #ececec; --ink-soft: #a6a6a6; --bg: #16171a;
-    --panel: #1e1f23; --line: #34363c; --accent: #7fb6a2; --error: #e08a76;
+    --panel: #1e1f23; --line: #34363c; --accent: #7fb6a2; --red: #e08a76;
   }
 }
 * { box-sizing: border-box; }
@@ -93,7 +94,7 @@ button:hover, .button:hover { filter: brightness(1.05); }
   white-space: nowrap;
 }
 .button--ghost:hover { filter: none; background: var(--bg); }
-.button--danger { color: var(--error); border-color: var(--error); }
+.button--danger { color: var(--red); border-color: var(--red); }
 .button--danger:hover { background: var(--bg); }
 .runmeta {
   margin: 2rem 0 0; padding: 0.9rem 0 0; border-top: 1px solid var(--line);
@@ -161,6 +162,9 @@ button:hover, .button:hover { filter: brightness(1.05); }
 }
 .draft__work textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .draft__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.85rem; }
+/* left-aligned: override the margin-left:auto that .button--ghost carries
+   for the result-page toolbar */
+.draft__actions button, .draft__actions .button { margin: 0; }
 .draft__diff-label, .draft__note { font-size: 0.85rem; color: var(--ink-soft); margin: 0.5rem 0 0.25rem; }
 .draft__diff {
   white-space: pre-wrap; line-height: 1.7;
