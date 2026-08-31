@@ -3,6 +3,58 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Supabase Auth + per-user scoping: STOPPED at Stage 0 (blocked)
+
+Branch `feat/supabase-auth-user-scoping`. **Only Stage 0 (documentation)
+landed. No code was written. Stages 1–5 were not started.**
+
+Shipped in this entry: `docs/migrations/2026-09-01_user_scoping.sql` (the
+forward + rollback SQL for the `user_id` column, the per-user `drafts`
+uniqueness key, and the three indexes — already applied by hand in the
+Supabase SQL editor) and `docs/USER_SCOPING.md` (the design: applied
+scoping in the application layer, the `build_input(form, user_id)` seam,
+the `{"user": {"id", "email"}}` session shape, `SUPABASE_ANON_KEY`
+required in `.env`, RLS deferred, magic link deferred).
+
+**What blocked it.** The overnight run could not build the project's
+environment, so `uv run pytest` and `uv run lint-imports` could not be
+executed *at all* — not once, at any point. `uv sync` fails resolving two
+of the four pinned capability dependencies:
+
+- `cover-letter-writer @ v0.13.0` — `git fetch` → `could not read
+  Username for 'https://github.com'`
+- `targeted-editor @ v0.1.0` — same
+
+`cv-writer` and `job-analyst` build fine, which rules out a general
+network or proxy fault: those two repos are public and the other two are
+private, and the cloud session's GitHub credential has no grant for them
+(`add_repo` for both, at read and at push: *"you don't have access"*).
+The checked-out `.venv` is empty, and there is no cached wheel or
+source-dist for either package anywhere on the box.
+
+Since the standing rule for this work is that **every commit leaves both
+`pytest` and `lint-imports` green**, and neither command can run, no code
+change could be made and verified. Writing Stages 1–5 unverified — a
+signature change threaded through three stores, both writer pages, and
+~20 route call sites — would have meant pushing several hundred lines
+that had never been imported once. Stopped instead, per the run's own
+stop rule. Stage 0 is documentation only and changes no code path, so the
+suite's state is identical to `main`'s; that commit could not be gated on
+a green run either, and is flagged here rather than claimed as verified.
+
+**⚠️ The schema is now ahead of the code.** The migration has been
+applied, so all three tables have `user_id uuid not null`. The app does
+not write it. **Inserts into `background_documents`, `job_posts` and
+`drafts` will fail until Stage 1–5 code lands** — creating a document, a
+job post, or opening a draft will error in production. Either finish the
+code or run the rollback SQL in the migration file.
+
+**To unblock:** grant the cloud session's GitHub identity read access to
+`onlinemoose/cover-letter-writer` and `onlinemoose/targeted-editor` (or
+run the work somewhere the existing pins resolve). Everything else about
+the plan is unchanged and ready to execute; the last verified state was
+72 tests passing on `main` at 7979b5d.
+
 ## 2026-08-31 — Live word count on the slow pages (cv-writer v0.5.0, cover-letter-writer v0.13.0)
 
 Both capabilities gained an optional keyword-only `on_progress` callback
