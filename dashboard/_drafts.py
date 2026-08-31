@@ -33,9 +33,19 @@ from typing import Protocol
 _TABLE = "drafts"
 
 
+def normalize(text: str) -> str:
+    """Canonical form for stored draft text: Unix newlines only.
+
+    The editor maps a browser text selection to character offsets in this
+    string, and a `<pre>` normalises `\\r\\n` to `\\n`, so a stored `\\r\\n`
+    would shift every offset. Normalise once, at the store boundary.
+    """
+    return (text or "").replace("\r\n", "\n").replace("\r", "\n")
+
+
 def source_hash(text: str) -> str:
-    """The dedupe key for a run's output — sha256 of the exact text."""
-    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+    """The dedupe key for a run's output — sha256 of the normalised text."""
+    return hashlib.sha256(normalize(text).encode("utf-8")).hexdigest()
 
 
 def apply_revision(current: str, span_start: int, span_len: int, revised: str) -> str:
@@ -336,7 +346,7 @@ def reset() -> None:
 
 
 def create_or_get_draft(slug: str, section: str, text: str) -> Draft:
-    return _store().create_or_get(slug, section, text)
+    return _store().create_or_get(slug, section, normalize(text))
 
 
 def get_draft(draft_id: str) -> Draft | None:

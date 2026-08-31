@@ -198,14 +198,33 @@ def test_revise_returns_a_proposal_without_mutating(client: TestClient):
     assert _drafts.get_draft(draft.id).revisions == []
 
 
-def test_revise_rejects_a_stale_selection(client: TestClient):
+def test_revise_rejects_a_selection_that_is_gone(client: TestClient):
     draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
     resp = client.post(
         f"/drafts/{draft.id}/revise",
         data={"selection": "not there", "span_start": 0, "span_len": 9, "instruction": "x"},
     )
     assert resp.status_code == 409
-    assert "out of date" in resp.json()["error"]
+    assert "reselect" in resp.json()["error"]
+
+
+def test_revise_recovers_when_offsets_are_off_but_the_text_is_present(client: TestClient):
+    # A <pre> can shift character offsets (leading newline, CRLF). If the
+    # selection text still occurs exactly once, the route locates it.
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT)
+    resp = client.post(
+        f"/drafts/{draft.id}/revise",
+        data={
+            "selection": "quick brown",
+            "span_start": 0,  # wrong — real offset is 4
+            "span_len": len("quick brown"),
+            "instruction": "shout it",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["span_start"] == TEXT.index("quick brown")
+    assert body["revised"] == "QUICK BROWN"
 
 
 def test_revise_requires_an_instruction(client: TestClient):

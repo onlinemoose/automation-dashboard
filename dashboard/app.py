@@ -35,6 +35,26 @@ _TEMPLATES = _HERE / "templates"
 _STATIC = _HERE / "static"
 
 
+def _resolve_span(
+    current: str, selection: str, span_start: int, span_len: int
+) -> tuple[int, int] | None:
+    """Where `selection` sits in `current`, as (start, len).
+
+    The offsets the browser computed are trusted when they still line up.
+    If they don't — a `<pre>` can normalise newlines, and the text may
+    have shifted — fall back to locating the selection text itself, but
+    only when it occurs exactly once (otherwise it's genuinely
+    ambiguous / stale). Returns None when it can't be placed.
+    """
+    if selection and current[span_start : span_start + span_len] == selection:
+        return span_start, span_len
+    if selection:
+        first = current.find(selection)
+        if first != -1 and current.find(selection, first + 1) == -1:
+            return first, len(selection)
+    return None
+
+
 def _asset_version() -> str:
     """Short hash of the static assets, appended as `?v=` to their URLs so
     a browser fetches the new file after a deploy instead of a stale cache."""
@@ -446,11 +466,13 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
             return JSONResponse({"error": "bad span offsets"}, status_code=422)
         if not instruction:
             return JSONResponse({"error": "An instruction is required."}, status_code=422)
-        if draft.current[span_start:span_start + span_len] != selection:
+        span = _resolve_span(draft.current, selection, span_start, span_len)
+        if span is None:
             return JSONResponse(
-                {"error": "The selection is out of date — reload and try again."},
+                {"error": "The selected text is no longer in the draft — reselect and try again."},
                 status_code=409,
             )
+        span_start, span_len = span
 
         if app.state.stub_runs:
             proposed = _targeted_edit.Revision(
@@ -501,11 +523,13 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
                 cost = {}
         except ValueError:
             cost = {}
-        if draft.current[span_start:span_start + span_len] != selection:
+        span = _resolve_span(draft.current, selection, span_start, span_len)
+        if span is None:
             return JSONResponse(
-                {"error": "The selection is out of date — reload and try again."},
+                {"error": "The selected text is no longer in the draft — reselect and try again."},
                 status_code=409,
             )
+        span_start, span_len = span
         updated = await run_in_threadpool(
             lambda: _drafts.record_revision(
                 draft_id,

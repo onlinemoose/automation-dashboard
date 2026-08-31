@@ -21,7 +21,11 @@
     </span>
   </div>
 
-  <pre class="draft__doc" id="draft-doc">{{ draft.current }}</pre>
+  {# The newline right after <pre> is swallowed by the browser (HTML rule),
+     so a draft whose text itself starts with a newline still lines up 1:1
+     with the character offsets the editor computes. Keep it. #}
+  <pre class="draft__doc" id="draft-doc">
+{{ draft.current }}</pre>
 
   <button type="button" class="draft__revise-btn" id="draft-revise-btn" hidden>Revise…</button>
 
@@ -31,7 +35,7 @@
 
     <div id="draft-ask">
       <label for="draft-instruction">What should change?</label>
-      <textarea id="draft-instruction" rows="3"
+      <textarea id="draft-instruction" rows="4"
                 placeholder="e.g. make this more concrete · drop the second sentence · less breathless"></textarea>
       <div class="draft__actions">
         <button type="button" id="draft-propose">Propose revision</button>

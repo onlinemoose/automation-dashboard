@@ -98,7 +98,7 @@
   }
 
   function onSelectionSettled(evt) {
-    if (pending) return; // one edit at a time — ignore new selections
+    if (pending || !work.hidden) return; // one edit at a time
     var off = selectionOffsets();
     if (!off || off.end <= off.start || !doc.textContent.slice(off.start, off.end).trim()) {
       hide(reviseBtn);
@@ -124,6 +124,7 @@
   });
 
   function openWork() {
+    hide(reviseBtn);
     selectionBox.textContent = pending.selection;
     workTitle.textContent = "Revise this span";
     instruction.value = "";
@@ -146,6 +147,7 @@
     pendingCandidate = null;
     lastProposal = null;
     hide(work);
+    hide(reviseBtn);
     doc.classList.remove("draft__doc--locked");
     window.getSelection().removeAllRanges();
   }
@@ -245,13 +247,17 @@
     if (!pending || !lastProposal) return;
     setBusy(true);
     clearError();
+    // Prefer the offsets /revise resolved server-side (a <pre> can shift
+    // them); fall back to what we captured on selection.
+    var start = typeof lastProposal.span_start === "number" ? lastProposal.span_start : pending.start;
+    var len = typeof lastProposal.span_len === "number" ? lastProposal.span_len : pending.len;
     fetch("/drafts/" + draftId + "/accept", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form({
         selection: pending.selection,
-        span_start: pending.start,
-        span_len: pending.len,
+        span_start: start,
+        span_len: len,
         instruction: instruction.value.trim(),
         revised: lastProposal.revised,
         note: lastProposal.note || "",

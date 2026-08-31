@@ -18,6 +18,9 @@
   }
 }
 * { box-sizing: border-box; }
+/* Author rules like `button { display: inline-block }` otherwise beat the
+   UA `[hidden]` rule, so `el.hidden = true` silently fails on buttons. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -137,17 +140,27 @@ button:hover, .button:hover { filter: brightness(1.05); }
   z-index: 50; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .draft__work {
-  margin: 1rem 0 0; padding: 1rem;
+  margin: 1rem 0 0; padding: 1.25rem;
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--panel);
 }
 .draft__work h2 { margin-top: 0; }
 .draft__selection {
-  margin: 0 0 0.75rem; padding: 0.5rem 0.75rem;
-  border-left: 3px solid var(--line); color: var(--ink-soft);
-  white-space: pre-wrap; font-size: 0.9rem;
+  margin: 0 0 1rem; padding: 0.6rem 0.85rem;
+  border-left: 3px solid var(--accent); color: var(--ink-soft);
+  white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6;
 }
-.draft__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.draft__work label {
+  display: block; font-weight: 600; margin: 0 0 0.35rem;
+}
+.draft__work textarea {
+  width: 100%; padding: 0.6rem 0.7rem;
+  font: inherit; color: inherit; background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  resize: vertical; min-height: 5rem;
+}
+.draft__work textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.draft__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.85rem; }
 .draft__diff-label, .draft__note { font-size: 0.85rem; color: var(--ink-soft); margin: 0.5rem 0 0.25rem; }
 .draft__diff {
   white-space: pre-wrap; line-height: 1.7;
