@@ -221,4 +221,7 @@ PAGE = Page(
     run=run,
     sections=sections,
     run_meta=run_meta,
+    # A tailored CV is a long-form document from one LLM call; a full-length
+    # regional CV (e.g. a German Lebenslauf) can run for minutes.
+    slow=True,
 )

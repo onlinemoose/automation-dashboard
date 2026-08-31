@@ -91,6 +91,13 @@ class Page:
     # Optional: map the capability's `Output` to a `RunMeta` for the cost
     # footer. Pages whose capability reports no cost leave this `None`.
     run_meta: Callable[[object], RunMeta] | None = None
+    # Set on pages whose `run()` routinely takes minutes (a long-form
+    # document from one LLM call). The submit route then streams a holding
+    # view immediately and keeps the connection warm while `run()` works,
+    # so a hosting proxy's time-to-first-byte timeout can't kill the
+    # request. Quick pages (sub-minute) leave this False and get a plain
+    # response. See docs/EXPERIENCE.md ("Slow pages").
+    slow: bool = False
 
 
 class FormReader:

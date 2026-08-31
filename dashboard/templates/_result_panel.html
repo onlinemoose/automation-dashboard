@@ -1,0 +1,38 @@
+{# The result view's panel, on its own so the streamed "slow page" response
+   (_running_close.html) can reuse the exact same markup the plain
+   result.html renders. Needs: page, sections, meta. #}
+<section class="panel">
+  <p class="crumb"><a href="/p/{{ page.slug }}">&larr; {{ page.title }}</a></p>
+  {% for section in sections %}
+  <article class="result">
+    <div class="result__head">
+      <h2>{{ section.heading }}</h2>
+      <form class="result__edit" method="post" action="/drafts">
+        <input type="hidden" name="slug" value="{{ page.slug }}">
+        <input type="hidden" name="section" value="{{ section.heading | lower | replace(' ', '-') }}">
+        <input type="hidden" name="text" value="{{ section.markdown }}">
+        <button type="submit" class="button button--ghost">Edit draft</button>
+      </form>
+      <a class="button button--ghost"
+         download="{{ page.slug }}-{{ section.heading | lower | replace(' ', '-') }}.md"
+         href="data:text/markdown;charset=utf-8,{{ section.markdown | urlencode }}">Download .md</a>
+    </div>
+    <div class="markdown">{{ section.markdown | markdown }}</div>
+  </article>
+  {% endfor %}
+
+  {% if meta %}
+  <footer class="runmeta">
+    <span class="runmeta__cost">{{ meta.cost_usd | usd4 }} <span class="runmeta__est">est.</span></span>
+    <span class="runmeta__tokens">
+      {{ meta.input_tokens | thousands }} in ·
+      {{ meta.output_tokens | thousands }} out ·
+      {{ meta.cache_write_input_tokens | thousands }} cache-write ·
+      {{ meta.cache_read_input_tokens | thousands }} cache-read
+    </span>
+    <span class="runmeta__src">{{ meta.capability }} {{ meta.capability_version }}</span>
+  </footer>
+  {% endif %}
+
+  <p><a class="button" href="/p/{{ page.slug }}">Run again</a></p>
+</section>

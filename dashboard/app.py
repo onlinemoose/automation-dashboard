@@ -9,8 +9,10 @@ See `docs/BACKGROUND_DOCUMENTS.md` and `docs/JOB_POSTS.md`.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import os
 import secrets
 import warnings
@@ -18,7 +20,13 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
@@ -33,6 +41,13 @@ from dashboard.pages._spec import FormError, Page, RunMeta
 _HERE = Path(__file__).resolve().parent
 _TEMPLATES = _HERE / "templates"
 _STATIC = _HERE / "static"
+
+_log = logging.getLogger("dashboard")
+
+# A `slow=True` page streams its result: flush a holding view now, then a
+# keepalive comment every few seconds until `run()` returns. Anything well
+# under a hosting proxy's response timeout (Render's is ~100s) works.
+_KEEPALIVE_SECONDS = 15
 
 
 def _resolve_span(
@@ -167,6 +182,51 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def _job_choices(page: Page) -> list:
         return await run_in_threadpool(_jobs.list_job_posts) if _wants_jobs(page) else []
 
+    def _result_page(request: Request, page: Page, output: object) -> Response:
+        meta = page.run_meta(output) if page.run_meta else None
+        return render(
+            "result.html", request,
+            page=page, sections=page.sections(output), meta=meta,
+        )
+
+    def _streamed_result(request: Request, page: Page, data: object) -> StreamingResponse:
+        """The result of a `slow=True` page, streamed.
+
+        Flush the holding view straight away, then a keepalive comment
+        every `_KEEPALIVE_SECONDS` while `run()` works in a worker thread,
+        then the real result markup plus a script that swaps it in. The
+        first byte lands in well under a second, so a hosting proxy's
+        time-to-first-byte / idle timeout can't kill a call that takes
+        minutes. Headers are already sent by the time `run()` could fail,
+        so a failure is rendered into the body, not as a 5xx.
+        """
+        tpl = templates.get_template
+
+        async def body():
+            yield tpl("_running_open.html").render(page=page)
+            task = asyncio.ensure_future(run_in_threadpool(page.run, data))
+            while not task.done():
+                _, pending = await asyncio.wait({task}, timeout=_KEEPALIVE_SECONDS)
+                if pending:
+                    yield "<!-- working -->\n"
+            try:
+                output = task.result()
+            except Exception as exc:  # noqa: BLE001 - any run() failure, shown in the body
+                _log.exception("slow page %s: run() failed", page.slug)
+                yield tpl("_running_error.html").render(page=page, error=type(exc).__name__)
+                return
+            meta = page.run_meta(output) if page.run_meta else None
+            yield tpl("_running_close.html").render(
+                page=page, sections=page.sections(output), meta=meta,
+            )
+
+        return StreamingResponse(
+            body(),
+            media_type="text/html; charset=utf-8",
+            # ask intermediate proxies not to buffer the trickle
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     @app.get("/p/{slug}", response_class=HTMLResponse)
     async def page_form(request: Request, slug: str):
         if (redirect := guard(request)) is not None:
@@ -200,17 +260,16 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
                 documents=await _doc_choices(page), jobs=await _job_choices(page),
             )
         if app.state.stub_runs:
-            output = page.example_output  # stub mode: no capability call
-        else:
-            # `run()` is synchronous and can take 30–60s (LLM call). Offload it
-            # to a worker thread so the event loop stays free to answer other
-            # requests — including the platform health check.
-            output = await run_in_threadpool(page.run, data)
-        meta = page.run_meta(output) if page.run_meta else None
-        return render(
-            "result.html", request,
-            page=page, sections=page.sections(output), meta=meta,
-        )
+            return _result_page(request, page, page.example_output)  # no capability call
+        if page.slow:
+            # A minutes-long `run()` would blow a hosting proxy's response
+            # timeout before the first byte. Stream instead (see below).
+            return _streamed_result(request, page, data)
+        # `run()` is synchronous and can take 30–60s (LLM call). Offload it
+        # to a worker thread so the event loop stays free to answer other
+        # requests — including the platform health check.
+        output = await run_in_threadpool(page.run, data)
+        return _result_page(request, page, output)
 
     # --- background documents -------------------------------------------
     # The app's own store (CLAUDE.md rule 6), not a capability. Notes here

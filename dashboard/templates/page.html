@@ -59,7 +59,11 @@
     </div>
     {% endfor %}
     <button type="submit">Run</button>
+    {% if page.slow %}
+    <p class="hint">This one writes a long document in one pass — it can take a few minutes. Keep the tab open.</p>
+    {% else %}
     <p class="hint">Capabilities that call an LLM can take up to a minute.</p>
+    {% endif %}
   </form>
 </section>
 {% endblock %}

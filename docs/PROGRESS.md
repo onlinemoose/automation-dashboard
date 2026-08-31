@@ -3,6 +3,33 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-08-31 — Slow pages: stream the result to beat the proxy timeout
+
+CV Writer (and Cover Letter Writer) timed out **only on the deployed
+server**, worst for a German role. Cause: `cv_writer.run()` is one
+non-streaming LLM call at `max_tokens=16_000`; a full Lebenslauf runs for
+minutes, and Render's proxy drops any request that produces no response
+bytes for ~100s. Local has no such proxy, so it always came back there.
+
+Fix in this repo (experience-layer concern, not the capability):
+
+- `Page` gains `slow: bool = False`. `cover_letter_writer` and `cv_writer`
+  set `slow=True`; the draft-revision and job-analyse routes are quick and
+  untouched.
+- `POST /p/{slug}` for a slow page now returns a `StreamingResponse`:
+  flush a holding view at once, a keepalive comment every 15s while
+  `run()` works in the threadpool, then the result panel + a swap script
+  (`_running_close.html`) — or an in-body error (`_running_error.html`),
+  since the `200` is already committed.
+- `result.html` split: the panel moved to `_result_panel.html`, shared by
+  the plain result page and the streamed close.
+- Holding-view spinner CSS in `app.css`; `X-Accel-Buffering: no` +
+  `Cache-Control: no-cache` on the stream.
+
+Verified under real uvicorn: first byte at ~1s, keepalives at 15s/30s, a
+35s run completes and swaps in cleanly. 70 tests pass, `lint-imports`
+clean. Not a job queue — that's still a deliberate later addition.
+
 ## 2026-08-31 — Pin job-analyst and targeted-editor to git tags
 
 Both capabilities were local `[tool.uv.sources]` path overrides while

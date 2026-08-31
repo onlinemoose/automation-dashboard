@@ -1,0 +1,17 @@
+{# Final flush of a "slow page" submit when run() raised. The HTTP status
+   is already 200 (headers went out with the first flush), so the failure
+   is shown in the body. Needs: page, error. #}
+    <section class="panel">
+      <p class="crumb"><a href="/p/{{ page.slug }}">&larr; {{ page.title }}</a></p>
+      <p class="error">The run didn’t finish ({{ error }}). Nothing was saved — try again.</p>
+      <p><a class="button" href="/p/{{ page.slug }}">Back to the form</a></p>
+    </section>
+    <script>
+      (function () {
+        var w = document.getElementById("working");
+        if (w) w.remove();
+      })();
+    </script>
+  </main>
+</body>
+</html>

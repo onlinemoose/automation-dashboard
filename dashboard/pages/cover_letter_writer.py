@@ -220,4 +220,7 @@ PAGE = Page(
     run=run,
     sections=sections,
     run_meta=run_meta,
+    # One LLM call drafting a full letter plus a targeting note; long
+    # postings and CVs push this past a minute.
+    slow=True,
 )

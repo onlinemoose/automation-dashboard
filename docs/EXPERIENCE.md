@@ -234,3 +234,30 @@ generating. Without that, a blocked event loop fails the health check and
 the host restarts the instance mid-request (seen as 502s on the assets
 right after the result page). A job queue (submit, poll, collect) is a
 deliberate later addition, not part of this template.
+
+### Slow pages
+
+Some capabilities produce a long-form document from one LLM call and run
+for *minutes*, not seconds (a full-length regional CV — a German
+Lebenslauf — is the case that forced this). A plain synchronous POST
+sends nothing until `run()` returns, so a hosting proxy that drops a
+request with no response bytes for ~100s (Render does) kills it before
+the result exists. Locally there's no such proxy, so it "works on my
+machine".
+
+Set `slow=True` on those pages' `Page`. The submit route then returns a
+`StreamingResponse` that:
+
+1. flushes a holding view (`templates/_running_open.html`) in the first
+   second — a spinner and "keep this tab open";
+2. drips an HTML-comment keepalive every `_KEEPALIVE_SECONDS` while
+   `run()` works in a worker thread, so the connection never idles out;
+3. streams the real result panel plus a one-line script that removes the
+   placeholder (`_running_close.html`), or an in-body error notice if
+   `run()` raised (`_running_error.html` — the `200` headers are already
+   sent, so a failure can't be a 5xx here).
+
+`_result_panel.html` is the shared partial: `result.html` includes it for
+quick pages, the streamed close reuses it verbatim. Stub mode ignores
+`slow` (there's no call to wait on). This is still not a job queue —
+it holds the one request open, cleanly, for the few minutes it needs.

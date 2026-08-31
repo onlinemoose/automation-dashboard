@@ -1,0 +1,13 @@
+{# Final flush of a "slow page" submit, on success: the real result panel,
+   then a script that drops the "working" placeholder, then the closing
+   tags _running_open.html left open. Needs: page, sections, meta. #}
+    {% include "_result_panel.html" %}
+    <script>
+      (function () {
+        var w = document.getElementById("working");
+        if (w) w.remove();
+      })();
+    </script>
+  </main>
+</body>
+</html>

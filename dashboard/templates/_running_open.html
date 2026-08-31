@@ -1,0 +1,25 @@
+{# First flush of a "slow page" submit. A complete document head + an open
+   <main> holding a "working" panel, but deliberately NOT closed: the
+   route keeps the connection warm with keepalive comments, then streams
+   _running_close.html (or _running_error.html) to finish it. #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.title }} — working…</title>
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Automation&nbsp;Dashboard</a>
+    <nav><a href="/jobs">Job posts</a> <a href="/documents">Background documents</a> <a href="/logout">Sign out</a></nav>
+  </header>
+  <main>
+    <section class="panel" id="working">
+      <p class="crumb"><a href="/p/{{ page.slug }}">&larr; {{ page.title }}</a></p>
+      <h1>{{ page.title }}</h1>
+      <p class="working__spin" aria-hidden="true"></p>
+      <p class="working__msg">Writing your document. This usually takes one to three
+        minutes for a long piece — keep this tab open, the result will appear here.</p>
+    </section>
