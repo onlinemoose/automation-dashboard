@@ -161,9 +161,12 @@ button:hover, .button:hover { filter: brightness(1.05); }
   resize: vertical; min-height: 5rem;
 }
 .draft__work textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-.draft__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.85rem; }
-/* left-aligned: override the margin-left:auto that .button--ghost carries
-   for the result-page toolbar */
+.draft__actions {
+  display: flex; gap: 0.5rem; flex-wrap: wrap;
+  justify-content: flex-end; margin-top: 0.85rem;
+}
+/* group them at the right; drop the margin-left:auto that .button--ghost
+   carries for the result-page toolbar */
 .draft__actions button, .draft__actions .button { margin: 0; }
 .draft__diff-label, .draft__note { font-size: 0.85rem; color: var(--ink-soft); margin: 0.5rem 0 0.25rem; }
 .draft__diff {
