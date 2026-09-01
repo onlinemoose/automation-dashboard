@@ -2,14 +2,11 @@
 {% block main %}
 <section class="panel">
   <h1>Capabilities</h1>
-  <p class="lede">One page per capability. Pick one to run it.</p>
   <ul class="pagelist">
-    {% for page in pages %}
     <li>
-      <a href="/p/{{ page.slug }}"><span class="pagelist__title">{{ page.title }}</span></a>
-      <p class="pagelist__summary">{{ page.summary }}</p>
+      <a href="/jobs"><span class="pagelist__title">Job Application Co-Pilot</span></a>
+      <p class="pagelist__summary">Add a job post, analyse what the hiring manager is really weighing, annotate each point, then build a tailored application from it.</p>
     </li>
-    {% endfor %}
   </ul>
 </section>
 {% endblock %}

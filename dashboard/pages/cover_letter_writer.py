@@ -78,10 +78,10 @@ FIELDS = (
     ),
     Field(
         "background_document_ids",
-        "Saved background documents",
+        "Saved documents",
         widget="checklist",
         help="Optional. Tick any saved notes to include as background context for "
-        "this run. Manage them under Background documents.",
+        "this run. Manage them under Documents.",
     ),
     Field(
         "background_documents",

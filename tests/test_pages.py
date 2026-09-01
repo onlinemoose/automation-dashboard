@@ -22,11 +22,14 @@ def client() -> TestClient:
     return TestClient(create_app(auth_disabled=True))
 
 
-def test_index_lists_every_page(client: TestClient) -> None:
+def test_index_shows_the_copilot_entry(client: TestClient) -> None:
+    # The homepage now leads with the Job Application Co-Pilot, which drops
+    # the user into the job posts area. The individual capability pages
+    # (Cover Letter, CV) keep their `/p/{slug}` routes but are not listed
+    # here — they'll be linked from inside the flow later.
     body = client.get("/").text
-    for page in PAGES:
-        assert page.title in body
-        assert f"/p/{page.slug}" in body
+    assert "Job Application Co-Pilot" in body
+    assert 'href="/jobs"' in body
 
 
 @pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{{ "Edit" if doc else "New" }} background document — Automation Dashboard{% endblock %}
+{% block title %}{{ "Edit" if doc else "New" }} document — Automation Dashboard{% endblock %}
 {% block main %}
 <section class="panel">
-  <p class="crumb"><a href="/documents">&larr; Background documents</a></p>
+  <p class="crumb"><a href="/documents">&larr; Documents</a></p>
   <h1>{{ "Edit document" if doc else "New document" }}</h1>
 
   {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
@@ -15,7 +15,7 @@
     </div>
     <div class="field">
       <label for="body">Body</label>
-      <p class="help">Plain text or Markdown. Used verbatim as one background document.</p>
+      <p class="help">Plain text or Markdown. Used verbatim as one document.</p>
       <textarea id="body" name="body" rows="18">{{ values.get('body', '') }}</textarea>
     </div>
     <button type="submit">Save</button>

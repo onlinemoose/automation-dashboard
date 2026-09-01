@@ -3,6 +3,25 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Homepage reframed around the Job Application Co-Pilot
+
+Branch `new-user-flow`. First cut at a task-first entry point instead of a
+flat list of capability pages.
+
+- The homepage "Capabilities" list no longer iterates the `PAGES`
+  registry. It leads with a single **Job Application Co-Pilot** entry that
+  links to `/jobs` (the job posts area — add a posting, analyse it, then
+  build an application from it).
+- The Cover Letter and CV Writer pages are unchanged and still served at
+  their `/p/{slug}` routes; they are just no longer linked from the
+  homepage. Where to surface them inside the flow is still open.
+- Dropped the "One page per capability. Pick one to run it." lede.
+- Renamed the "Background documents" area to **Documents** across the UI
+  (nav, the list and form screens, and the checklist field labels on the
+  writer pages). The store, routes (`/documents`) and code names are
+  unchanged.
+- `test_index_lists_every_page` became `test_index_shows_the_copilot_entry`.
+
 ## 2026-09-01 — Supabase Auth deployed + two-account isolation verified
 
 The branch below merged to `main` (`56bdcc0`) and auto-deployed to Render.

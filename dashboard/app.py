@@ -35,7 +35,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from dashboard import _auth, _documents, _drafts, _job_analysis, _jobs, _targeted_edit
 from dashboard._auth import is_authed
 from dashboard._render import to_html
-from dashboard.pages import PAGES, PAGES_BY_SLUG
+from dashboard.pages import PAGES_BY_SLUG
 from dashboard.pages._spec import FormError, Page, RunMeta
 
 _HERE = Path(__file__).resolve().parent
@@ -195,7 +195,7 @@ def create_app(
     def index(request: Request):
         if (redirect := guard(request)) is not None:
             return redirect
-        return render("index.html", request, pages=PAGES)
+        return render("index.html", request)
 
     async def _doc_choices(page: Page, user_id: str) -> list:
         if not _wants_documents(page):
