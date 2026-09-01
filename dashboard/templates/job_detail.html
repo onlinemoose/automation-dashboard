@@ -58,7 +58,6 @@
 
   {% else %}
   {# Working state — the posting is settled; annotate the emphasis list. #}
-  <p class="posting-readonly">{{ job.posting }}</p>
   <form method="post" action="/jobs/{{ job.id }}">
     <input type="hidden" name="title" value="{{ job.title }}">
     <input type="hidden" name="posting" value="{{ job.posting }}">
