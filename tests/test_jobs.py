@@ -182,15 +182,19 @@ def test_another_users_job_id_cannot_be_smuggled_into_a_run(monkeypatch) -> None
 # --- the screens ---------------------------------------------------------
 
 
-def test_jobs_list_row_shows_title_word_count_and_delete(client: TestClient) -> None:
-    """Each row is kept spare: the title, an "NN words" size, and a delete
-    button rendered to the right of the row body — no posting dump."""
-    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+def test_jobs_list_row_shows_a_capped_posting_preview_and_delete(client: TestClient) -> None:
+    """Each row is kept spare: the title, the opening words of the posting
+    (capped, not the whole thing, not a bare count), and a delete button
+    rendered to the right of the row body."""
+    opening = "Own the roadmap and set the product direction end to end"
+    long_posting = opening + " " + " ".join(f"tail{i}" for i in range(60))
+    job = _jobs.create_job_post("Acme — Product Lead", long_posting, USER)
     body = client.get("/jobs").text
 
     assert "Acme — Product Lead" in body
-    assert f"{len(POSTING.split())} words" in body
-    assert "Own the roadmap" not in body  # the posting text is not spilled here
+    assert opening in body  # the preview starts at the opening sentence
+    assert "tail59" not in body  # ...and is capped, not the full posting
+    assert f"{len(long_posting.split())} words" not in body  # not a bare word count
 
     delete = f'action="/jobs/{job.id}/delete"'
     assert delete in body
