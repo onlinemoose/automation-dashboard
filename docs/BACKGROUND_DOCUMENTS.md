@@ -1,8 +1,10 @@
 # Background documents
 
-Reusable written context the writer pages can pull in — a bio, project
+Reusable text the writer pages can pull in — your **CV**, a bio, project
 write-ups, company-context notes, answers to recurring application
-questions. Kept once, picked per run, instead of pasted every time.
+questions. Kept once, picked per run, instead of pasted every time. On
+the Cover Letter / CV pages one document is chosen as the CV
+(`doc_picker`), any others as background context (`checklist`).
 
 This is **the app's own storage** (CLAUDE.md rule 6): private to the
 dashboard, no capability sees it. A page reads it only to turn a picked id
@@ -14,8 +16,8 @@ into text.
 |---|---|
 | Store (the only module that talks to Supabase) | `dashboard/_documents.py` |
 | CRUD screen | `/documents` routes in `dashboard/app.py`, `templates/documents.html`, `templates/document_form.html` |
-| The picker on a writer page | `"checklist"` widget in `dashboard/pages/_spec.py` + `templates/page.html` |
-| Wiring into the contract | `build_input` in `dashboard/pages/cover_letter_writer.py` and `cv_writer.py` |
+| The pickers on a writer page | `"checklist"` (background) and `"doc_picker"` (the CV) widgets in `dashboard/pages/_spec.py` + `templates/page.html` |
+| Wiring into the contract | `build_input` in `dashboard/pages/cover_letter_writer.py` and `cv_writer.py` — the picked CV id resolves to `cv`, ticked ids fold into `background_documents` |
 
 `/documents`, `/documents/new`, `/documents/{doc_id}`,
 `/documents/{doc_id}/delete` are app-native routes — not capability pages.

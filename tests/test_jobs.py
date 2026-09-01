@@ -508,11 +508,14 @@ def test_picker_appears_on_the_writer_page(client: TestClient) -> None:
     assert "Acme — Product Lead" in body
 
 
-def test_writer_pages_drop_the_job_posting_textarea(client: TestClient) -> None:
+def test_writer_pages_drop_the_fields_the_job_post_supplies(client: TestClient) -> None:
+    # The picked job post carries the posting and the emphasis list, so
+    # neither has its own box on the writer form any more.
     for slug in ("cover-letter-writer", "cv-writer"):
         body = client.get(f"/p/{slug}").text
         assert 'name="job_post_id"' in body  # the picker stays
-        assert 'name="job_posting"' not in body  # the free-text box is gone
+        assert 'name="job_posting"' not in body
+        assert 'name="emphasis"' not in body
 
 
 def test_writer_run_requires_a_picked_job_post(client: TestClient) -> None:

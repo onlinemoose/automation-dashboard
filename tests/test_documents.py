@@ -135,6 +135,14 @@ def test_documents_page_lists_saved_docs(client: TestClient) -> None:
     assert "They sell to hospitals." in body
 
 
+def test_documents_delete_is_an_icon_button(client: TestClient) -> None:
+    doc = _documents.create_document("Company context", "They sell to hospitals.", USER)
+    body = client.get("/documents").text
+    assert f'action="/documents/{doc.id}/delete"' in body
+    assert 'class="iconbtn iconbtn--danger"' in body
+    assert 'aria-label="Delete document"' in body
+
+
 def test_new_document_form_renders(client: TestClient) -> None:
     body = client.get("/documents/new").text
     assert 'name="title"' in body and 'name="body"' in body
@@ -218,3 +226,58 @@ def test_ticked_documents_reach_the_capability_input(monkeypatch) -> None:
         "Ten years shipping data tools.",
         "a one-off note",
     ]
+
+
+# --- the CV document picker -------------------------------------------------
+
+
+def test_cv_picker_replaces_the_cv_textarea_on_both_writer_pages(client: TestClient) -> None:
+    _documents.create_document("My CV", "Priya Nair — infra engineer.", USER)
+    for slug in ("cover-letter-writer", "cv-writer"):
+        body = client.get(f"/p/{slug}").text
+        assert 'name="cv_document_id"' in body  # the picker
+        assert "My CV" in body  # listing the caller's documents
+        assert 'name="cv"' not in body  # the free-text box is gone
+
+
+def test_picked_cv_document_reaches_the_capability(monkeypatch) -> None:
+    doc = _documents.create_document("My CV", "PRIYA NAIR CV BODY", USER)
+
+    seen: dict[str, object] = {}
+
+    def fake_run(data, **_):
+        seen["data"] = data
+        return cover_letter_writer.PAGE.example_output
+
+    monkeypatch.setattr(cover_letter_writer.PAGE, "run", fake_run)
+    client = TestClient(create_app(auth_disabled=True))
+
+    form = dict(cover_letter_writer.PAGE.example_form)
+    form.pop("cv", None)  # prove the CV comes from the picked document
+    resp = client.post(
+        "/p/cover-letter-writer",
+        data={**form, "cv_document_id": doc.id},
+    )
+    assert resp.status_code == 200, resp.text
+    assert seen["data"].cv == "PRIYA NAIR CV BODY"
+
+
+def test_writer_run_requires_a_cv_document(client: TestClient) -> None:
+    resp = client.post(
+        "/p/cover-letter-writer",
+        data={"job_posting": "A posting to satisfy the job side.",
+              "cv_document_id": "", "cv": ""},
+    )
+    assert resp.status_code == 422
+    assert "Load a saved CV." in resp.text
+
+
+def test_a_foreign_cv_document_cannot_be_smuggled_into_a_run() -> None:
+    foreign = _documents.create_document("A's CV", "SECRET CV OF USER A", "user-a")
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+    resp = b.post(
+        "/p/cover-letter-writer",
+        data={"job_posting": "A posting.", "cv_document_id": foreign.id, "cv": ""},
+    )
+    assert resp.status_code == 422  # not resolved -> required error, no leak
+    assert "SECRET CV OF USER A" not in resp.text

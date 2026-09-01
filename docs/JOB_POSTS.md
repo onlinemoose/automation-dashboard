@@ -28,11 +28,12 @@ picked id into `job_posting` text and an `emphasis` list.
    both (it asks first). A hand-typed / unparseable emphasis falls back to
    a plain textarea.
 4. On **Cover Letter Writer** / **CV Writer**, pick the job in **Load a
-   saved job post** — the only way in now (there is no free-text job
-   posting box). It supplies `job_posting` from the store and fills the
-   **emphasis** list, which stays editable. Run. From the **Job posts**
-   list, an analysed row carries shortcut icons straight to each writer
-   with that job preselected (`/p/<writer>?job_post_id=<id>`).
+   saved job post** — the only way in now. It supplies both `job_posting`
+   and the annotated `emphasis` list from the store (the writer pages have
+   no box for either; edit the emphasis on the job post itself). Pick a
+   CV document, then Run. From the **Job posts** list, an analysed row
+   carries shortcut icons straight to each writer with that job
+   preselected (`/p/<writer>?job_post_id=<id>`).
 
 On the **Job posts** list each row has an actions cell on the right:
 a delete icon always; once the post is analysed, a Cover Letter and a CV

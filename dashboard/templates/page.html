@@ -47,6 +47,16 @@
         {% if not jobs %}
         <p class="help">No saved job posts yet — <a href="/jobs">add and analyse one</a>.</p>
         {% endif %}
+      {% elif f.widget == "doc_picker" %}
+        <select id="{{ f.name }}" name="{{ f.name }}">
+          <option value="">— none —</option>
+          {% for doc in documents %}
+          <option value="{{ doc.id }}" {% if values.get(f.name) == doc.id %}selected{% endif %}>{{ doc.title }}</option>
+          {% endfor %}
+        </select>
+        {% if not documents %}
+        <p class="help">No saved documents yet — <a href="/documents">add one</a>.</p>
+        {% endif %}
       {% else %}
         <textarea id="{{ f.name }}" name="{{ f.name }}"
                   rows="{{ 10 if f.widget in ("textarea", "lines") else 3 }}"

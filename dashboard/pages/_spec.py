@@ -28,10 +28,12 @@ from dataclasses import dataclass
 #   "textarea"  - multi-line box
 #   "number"    - single-line numeric input
 #   "lines"     - multi-line box; each non-blank line is one list item
-#   "checklist" - one checkbox per saved Background document; the submitted
-#                 value is a list of document ids (read with FormReader.multi)
-#   "picker"    - a <select> of saved Job posts; the submitted value is one
-#                 job-post id (read with FormReader.text). "" means none.
+#   "checklist"  - one checkbox per saved document; the submitted value is
+#                  a list of document ids (read with FormReader.multi)
+#   "picker"     - a <select> of saved Job posts; the submitted value is one
+#                  job-post id (read with FormReader.text). "" means none.
+#   "doc_picker" - a <select> of saved documents; the submitted value is one
+#                  document id (read with FormReader.text). "" means none.
 Widget = str
 
 

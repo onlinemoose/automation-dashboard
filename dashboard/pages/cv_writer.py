@@ -34,15 +34,15 @@ FIELDS = (
         "Load a saved job post",
         widget="picker",
         help="Pick the analysed, annotated posting to write against, from your "
-        "list under Job posts. It fills the job posting and the emphasis list below.",
+        "list under Job posts. It supplies the posting and its emphasis list.",
     ),
     Field(
-        "cv",
-        "Current CV",
-        widget="textarea",
-        required=True,
-        help="Plain text, including the name / contact block at the top. "
-        "Convert a PDF or DOCX to text first.",
+        "cv_document_id",
+        "Load a saved CV",
+        widget="doc_picker",
+        help="Pick the CV to rewrite from the documents library. Paste it in "
+        "once under Documents (plain text or Markdown, including the name / "
+        "contact block), then reuse it here every run.",
     ),
     Field(
         "job_title",
@@ -76,14 +76,6 @@ FIELDS = (
         "Defaults to UK.",
     ),
     Field(
-        "emphasis",
-        "Points to emphasise",
-        widget="lines",
-        help="Optional. One point per line, most important first. A saved job "
-        'post fills this with an analysed list — "> " lines quote the posting, '
-        '"- " lines are your own notes.',
-    ),
-    Field(
         "background_document_ids",
         "Saved documents",
         widget="checklist",
@@ -101,9 +93,10 @@ FIELDS = (
 )
 
 EXAMPLE_FORM = {
-    # No job_posting field is rendered any more (the saved-job-post picker
-    # is the way in), but "Load example" still needs a posting to run
-    # against — build_input reads this raw value when nothing is picked.
+    # The job_posting and cv fields aren't rendered any more (a saved job
+    # post and a saved CV document are the way in). These raw values are the
+    # fallback build_input reads when nothing is picked — they keep the
+    # generic page test runnable without a live store.
     "job_posting": (_EXAMPLES / "job_posting.md").read_text(),
     "cv": (_EXAMPLES / "cv.md").read_text(),
     "emphasis": (_EXAMPLES / "emphasis.md").read_text(),
@@ -154,14 +147,25 @@ def build_input(form, user_id: str) -> Input:
         job_posting = job_post.posting
         emphasis_source = job_post.emphasis
     else:
-        # The job_posting field was removed — the picker is the way in. A
-        # raw job_posting may still arrive from "Load example" or a direct
-        # API post; otherwise a saved job post must be picked.
+        # The job_posting and emphasis fields were removed — a picked job
+        # post is the way in, and it carries both. Raw job_posting /
+        # emphasis may still arrive from the example form or a direct API
+        # post; otherwise a saved job post must be picked.
         job_posting = (form.get("job_posting") or "").strip()
         emphasis_source = form.get("emphasis") or ""
         if not job_posting:
             raise FormError({"job_post_id": "Load a saved job post."})
-    cv = r.text("cv", "Current CV", required=True)
+    # `cv_document_id` is an app storage key too — it resolves to the chosen
+    # document's body. A raw `cv` may still arrive from the example form or
+    # a direct API post; otherwise a saved CV must be picked.
+    cv_document_id = r.text("cv_document_id", "Saved CV")
+    cv_doc = _documents.get_document(cv_document_id, user_id) if cv_document_id else None
+    if cv_doc is not None:
+        cv = cv_doc.body
+    else:
+        cv = (form.get("cv") or "").strip()
+        if not cv:
+            raise FormError({"cv_document_id": "Load a saved CV."})
     job_title = r.text("job_title", "Role title")
     job_company = r.text("job_company", "Company")
     tone = r.text("tone", "Tone")

@@ -27,15 +27,19 @@ dependencies, `run()` called directly — and nothing depends on it.
 | `run_meta(output)` | *optional.* Map the `Output` to a `RunMeta` (cost + token counts) for the result-page cost footer. Leave unset if the capability reports no cost. |
 
 A `Field` has a `name` (must match the `Input` argument), a `label`, a
-`widget` (`text` / `textarea` / `number` / `lines` / `checklist`),
-`required`, and `help` text. `lines` is a textarea where each non-blank
-line becomes one list item — use it for `list[str]` inputs. `checklist`
-renders one checkbox per saved Background document and submits a list of
-ids; read it with `FormReader.multi(name)` and resolve the ids through
-`dashboard._documents` (see `docs/BACKGROUND_DOCUMENTS.md`). Its `name`
-is an app-storage key, so it's the one field whose name deliberately
-doesn't match an `Input` argument — `build_input` folds the resolved
-text into the real contract field.
+`widget` (`text` / `textarea` / `number` / `lines` / `checklist` /
+`picker` / `doc_picker`), `required`, and `help` text. `lines` is a
+textarea where each non-blank line becomes one list item — use it for
+`list[str]` inputs. `checklist` renders one checkbox per saved document
+and submits a list of ids; `doc_picker` is a `<select>` of saved
+documents submitting one id (`picker` is the same over saved Job posts).
+Read a checklist with `FormReader.multi(name)` and a picker with
+`FormReader.text(name)`, then resolve the ids through
+`dashboard._documents` / `dashboard._jobs` (see
+`docs/BACKGROUND_DOCUMENTS.md`, `docs/JOB_POSTS.md`). Those `name`s are
+app-storage keys — the fields whose names deliberately don't match an
+`Input` argument; `build_input` folds the resolved text into the real
+contract field.
 
 `FormReader` (also in `_spec.py`) is a small helper for `build_input`: it
 reads fields, collects every problem, and raises one `FormError` with all

@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Documents — Automation Dashboard{% endblock %}
 {% block main %}
+{% set icon_trash %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+{% endset %}
 <section class="panel">
   <p class="crumb"><a href="/">&larr; All capabilities</a></p>
   <h1>Documents</h1>
   <p class="lede">
-    Reusable notes — a bio, project write-ups, company-context notes, answers to
-    recurring application questions. Pick them per run on the Cover Letter and CV
-    pages to add background context.
+    Reusable text — your CV, a bio, project write-ups, company-context notes,
+    answers to recurring application questions. Paste each in once, then pick it
+    on the Cover Letter and CV pages: one as the CV, any others as background.
   </p>
 
   <p class="toolbar"><a class="button" href="/documents/new">New document</a></p>
@@ -20,10 +23,13 @@
         <a href="/documents/{{ doc.id }}"><span class="pagelist__title">{{ doc.title }}</span></a>
         <p class="pagelist__summary">{{ doc.body[:160] }}{% if doc.body|length > 160 %}…{% endif %}</p>
       </div>
-      <form method="post" action="/documents/{{ doc.id }}/delete"
-            onsubmit="return confirm('Delete “{{ doc.title }}”?')">
-        <button type="submit" class="button button--ghost button--danger">Delete</button>
-      </form>
+      <div class="pagelist__actions">
+        <form method="post" action="/documents/{{ doc.id }}/delete"
+              onsubmit="return confirm('Delete “{{ doc.title }}”?')">
+          <button type="submit" class="iconbtn iconbtn--danger"
+                  title="Delete document" aria-label="Delete document">{{ icon_trash }}</button>
+        </form>
+      </div>
     </li>
     {% endfor %}
   </ul>

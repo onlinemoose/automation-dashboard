@@ -83,7 +83,7 @@ def _asset_version() -> str:
 
 
 def _wants_documents(page: Page) -> bool:
-    return any(f.widget == "checklist" for f in page.fields)
+    return any(f.widget in ("checklist", "doc_picker") for f in page.fields)
 
 
 def _wants_jobs(page: Page) -> bool:

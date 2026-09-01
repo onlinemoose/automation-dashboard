@@ -3,6 +3,32 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — CV comes from a saved document, not a paste
+
+Branch `new-user-flow`. Both writers lose the `cv` textarea; the CV is now
+picked from the Documents library.
+
+- New `doc_picker` widget (a `<select>` of the user's documents, single
+  select) rendered by `templates/page.html`; `_wants_documents` now true
+  for it as well as `checklist`.
+- Both writer pages get a `cv_document_id` field (app-storage key, like
+  `job_post_id`). `build_input` resolves it to the document body as `cv`;
+  no pick → `FormError({"cv_document_id": "Load a saved CV."})`. Raw `cv`
+  in `EXAMPLE_FORM` stays as the fallback that keeps the generic page
+  test runnable. Both pages now have no HTML-`required` field, so
+  `test_empty_submission_is_rejected_when_fields_are_required` skips for
+  them — the per-page 422 tests in `test_documents.py` cover it.
+- Documents list: `Delete` button → trash icon (`.iconbtn iconbtn--danger`
+  in a `.pagelist__actions` cell), matching the Job posts list. Lede
+  reworded to include the CV.
+- No file upload — documents stay pasted text / Markdown (decided with
+  the user).
+- Dropped the "Points to emphasise" (`emphasis`) field from both writers
+  too. A run must come from a picked job post, whose Emphasis list always
+  overrode that field anyway — it was dead in the UI. `build_input` still
+  reads a raw `emphasis` value as the example/API fallback; `job_post_id`
+  help text reworded.
+
 ## 2026-09-01 — Trim the generic capability page chrome
 
 Branch `new-user-flow`. `templates/page.html` (drives every `/p/<slug>`
