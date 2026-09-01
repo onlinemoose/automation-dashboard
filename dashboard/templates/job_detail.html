@@ -50,10 +50,6 @@
   {# Reading state — view the post, then analyse it. #}
   <h2>Job posting</h2>
   <p class="posting-readonly">{{ job.posting }}</p>
-  <p class="help">
-    Analysing fills an emphasis list with the requirements the hiring manager is
-    most likely weighing, each anchored to the span of the posting it comes from.
-  </p>
   <div class="form-actions">
     <a class="button button--ghost" href="/jobs/{{ job.id }}?edit=1">Edit</a>
     <form method="post" action="/jobs/{{ job.id }}/analyse">
