@@ -3,6 +3,28 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Supabase Auth deployed + two-account isolation verified
+
+The branch below merged to `main` (`56bdcc0`) and auto-deployed to Render.
+
+- `SUPABASE_ANON_KEY` set as a Render service env var (it was already in
+  the local `.env`). Without it on the host the app silently uses the
+  offline login, so it is now a **required** env var everywhere the app
+  runs.
+- The migration had been applied by hand the night before; the three
+  tables started empty.
+- Forced sign-out confirmed on the live site — the pre-accounts cookie
+  redirected once to `/login`; signing in with the operator's Supabase
+  email + password worked.
+- Two-account isolation checked by hand on the live site: a second
+  Supabase user saw none of the operator's documents, job posts or
+  drafts; `/documents/<id>`, `/jobs/<id>`, `/drafts/<id>` for a foreign
+  row returned 404; a document created by the second user stayed
+  invisible to the operator.
+
+Still deferred: magic-link sign-in; RLS policies keyed to `auth.uid()`
+(see the entry below and `docs/USER_SCOPING.md`).
+
 ## 2026-09-01 — Supabase Auth + per-user data isolation
 
 Branch `feat/supabase-auth-user-scoping`. Real accounts via Supabase
@@ -26,7 +48,7 @@ created it. 98 tests pass, `lint-imports` clean.
   seam that already carries `job_post_id` and `background_document_ids`;
   the capability `Input` never sees it. No route added or removed.
 
-**Before this deploys**
+**Deploy steps (all done 2026-09-01 — see the entry above)**
 
 1. **Run `docs/migrations/2026-09-01_user_scoping.sql`** in the Supabase
    SQL editor if you have not already. It truncates the three tables,

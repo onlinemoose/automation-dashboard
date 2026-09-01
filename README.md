@@ -1,63 +1,87 @@
-# experience-layer-template
+# automation-dashboard
 
-A starting point for **the experience layer** of the automation system: a
-small web app that puts a usable face on the capability modules. One page
-per capability — the form fields are that capability's inputs, the
-results view is its output. The app collects the form, calls the
-capability's `run()`, and renders what comes back. No domain logic of its
-own.
+**The automation system's dashboard — the experience layer.** One small
+web app that puts a usable face on the capability modules: one page per
+capability, where the form fields *are* that capability's inputs and the
+results view *is* its output. The app collects the form, calls the
+capability's `run()`, and renders what comes back. It holds no domain
+logic of its own.
 
-The rules are in **`CLAUDE.md`** (Claude Code reads it automatically).
-The prose version and the "add a page" walk-through are in
-**`docs/EXPERIENCE.md`**.
+Live (private — an account per operator): https://automation-dashboard-r9i7.onrender.com
 
-Sibling of `capability-module-template`. Where that repo is the pattern
-for *one job*, this is the pattern for *the app people use to run those
-jobs*.
-
----
-
-## One-time setup
-
-- **`uv`** — `uv --version`, or install:
-  `curl -LsSf https://astral.sh/uv/install.sh | sh`
+The rules this app must not break are in **`CLAUDE.md`** (Claude Code
+reads it automatically). The prose version and the "add a page"
+walk-through are in **`docs/EXPERIENCE.md`**. Full system architecture:
+`automation-architecture/ARCHITECTURE.md`.
 
 ---
 
-## Make a new dashboard from this template
+## What's in it
 
-### 1. New repo
+**Capability pages** (`dashboard/pages/`, one per capability, all driven
+by the generic `GET`/`POST /p/{slug}` routes):
 
-On GitHub, **Use this template**, name it (e.g. `automation-dashboard`),
-clone it. Set `name` in `pyproject.toml` to match.
+| Page | Capability |
+|---|---|
+| Cover Letter Writer | `cover-letter-writer` |
+| CV Writer | `cv-writer` |
 
-### 2. Clear the worked example
+**The app's own areas** — its own storage, not a capability's
+(`CLAUDE.md` rule 6):
 
-Delete `dashboard/_example_capability.py`, `dashboard/pages/example.py`,
-and its line in `dashboard/pages/__init__.py`. (Leave them while you find
-your feet — the app runs as-is.)
+- **Background documents** (`/documents`) — reusable notes you tick into a
+  writer page. `docs/BACKGROUND_DOCUMENTS.md`.
+- **Job posts** (`/jobs`) — stored postings, with an *analyse* step that
+  calls the `job-analyst` capability for emphasis points.
+  `docs/JOB_POSTS.md`.
+- **Working drafts** (`/drafts/{id}`) — span-level revision of a result,
+  backed by the `targeted-editor` capability; undo by replay.
+  `docs/DRAFTS.md`.
 
-### 3. Configure
+**Accounts** — sign-in is email + password against **Supabase Auth**, and
+every stored row is scoped to the signed-in user. Public signup is off;
+operator accounts are created in the Supabase dashboard. How it works and
+the one-time migration: `docs/USER_SCOPING.md`,
+`docs/migrations/2026-09-01_user_scoping.sql`.
+
+---
+
+## Run it locally
 
 ```
-cp .env.example .env
-uv run python -m dashboard.hashpw     # paste the hash into DASHBOARD_PASSWORD_HASH
-python -c "import secrets; print(secrets.token_urlsafe(32))"   # -> SESSION_SECRET
+uv sync
+cp .env.example .env        # then fill it in — the comments in that file explain each key
+uv run dashboard           # http://127.0.0.1:8000
 ```
 
-### 4. Add your first capability page
+Key env (all in `.env`, which is gitignored):
 
-Follow `docs/EXPERIENCE.md` → **Adding a page**. In short: `uv add` the
-capability at a pinned git tag, copy `dashboard/pages/example.py`, wire
-it to the real `run` / `Input` / `Output`, register it.
+- `SESSION_SECRET` — a stable random string; signs the session cookie.
+- `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` — the app's data store. Unset →
+  in-memory backends that don't survive a restart (fine for a quick look).
+- `SUPABASE_ANON_KEY` — enables real Supabase Auth. Blank → an offline
+  dev login: `DASHBOARD_DEV_EMAIL` + the scrypt hash in
+  `DASHBOARD_PASSWORD_HASH` (generate one with
+  `uv run python -m dashboard.hashpw`).
+- `DASHBOARD_STUB_RUNS=1` — every page returns its canned example output,
+  no capability call, no API cost.
 
-### 5. Run it
+Checks:
 
 ```
-uv run dashboard          # http://127.0.0.1:8000
-uv run pytest             # every page renders + runs end to end
+uv run pytest             # every page renders + runs end to end; the guardrails hold
 uv run lint-imports       # no orchestration framework crept in
 ```
+
+---
+
+## Deploy
+
+One `uvicorn` service on **Render**, auto-deploying from `main`. The
+host-agnostic serving notes are in `docs/DEPLOY.md`; the Render-specific
+plan, the env-var list and the `render.yaml` reference are in
+`docs/DEPLOYMENT_CHECKLIST.md`. `docs/PROGRESS.md` is the dated log —
+read it before assuming anything about the current state.
 
 ---
 
@@ -66,9 +90,7 @@ uv run lint-imports       # no orchestration framework crept in
 - Depends on capabilities as **pinned git dependencies**
   (`<name> @ git+https://…@vX.Y.Z`), recorded in `uv.lock`. Calls their
   `run()` directly. Nothing depends on this app.
-- May **trigger** a Prefect pipeline via its API, but never defines
-  flows or tasks.
-- Deploys as **one service** — see `docs/DEPLOY.md`. Capabilities ride
-  along as installed dependencies.
-
-Full architecture: `automation-architecture/ARCHITECTURE.md`.
+- May **trigger** a Prefect pipeline via its API, but never defines flows
+  or tasks.
+- Deploys as **one deployable**; capabilities ride along as installed
+  dependencies.
