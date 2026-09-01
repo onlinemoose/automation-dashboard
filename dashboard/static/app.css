@@ -80,7 +80,7 @@ h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
 .pagelist--rows form { margin: 0; flex: none; }
 .toolbar { margin: 1.25rem 0 0.5rem; }
 .field { margin: 1.25rem 0; }
-.field label, .field .field__label { display: block; font-weight: 600; margin-bottom: 0.2rem; }
+.field label { display: block; font-weight: 600; margin-bottom: 0.2rem; }
 .field .help { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--ink-soft); }
 .field input, .field textarea {
   width: 100%; padding: 0.55rem 0.65rem;
@@ -88,14 +88,11 @@ h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
   border: 1px solid var(--line); border-radius: var(--radius);
 }
 .field textarea { resize: vertical; }
-/* A settled value shown for reading only — styled like a disabled textarea,
-   newlines kept, long text scrolls instead of pushing the page down. */
+/* The saved posting, shown as plain running text — not an input. Keeps the
+   line breaks from the pasted posting. */
 .posting-readonly {
-  padding: 0.55rem 0.65rem;
-  background: var(--panel);
-  border: 1px solid var(--line); border-radius: var(--radius);
+  margin: 0.4rem 0 1.5rem;
   white-space: pre-wrap; word-break: break-word;
-  max-height: 22rem; overflow-y: auto;
 }
 .checklist { list-style: none; padding: 0; margin: 0; }
 .checklist li { padding: 0.15rem 0; }

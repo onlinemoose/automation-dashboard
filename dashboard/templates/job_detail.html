@@ -48,10 +48,8 @@
 
   {% elif not analysed %}
   {# Reading state — view the post, then analyse it. #}
-  <div class="field">
-    <span class="field__label">Job posting</span>
-    <div class="posting-readonly">{{ job.posting }}</div>
-  </div>
+  <h2>Job posting</h2>
+  <p class="posting-readonly">{{ job.posting }}</p>
   <p class="help">
     Analysing fills an emphasis list with the requirements the hiring manager is
     most likely weighing, each anchored to the span of the posting it comes from.
@@ -65,10 +63,8 @@
 
   {% else %}
   {# Working state — the posting is settled; annotate the emphasis list. #}
-  <div class="field">
-    <span class="field__label">Job posting</span>
-    <div class="posting-readonly">{{ job.posting }}</div>
-  </div>
+  <h2>Job posting</h2>
+  <p class="posting-readonly">{{ job.posting }}</p>
   <form method="post" action="/jobs/{{ job.id }}">
     <input type="hidden" name="title" value="{{ job.title }}">
     <input type="hidden" name="posting" value="{{ job.posting }}">
