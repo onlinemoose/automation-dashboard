@@ -21,7 +21,6 @@
         <a href="/jobs/{{ job.id }}"><span class="pagelist__title">{{ job.title }}</span></a>
         <p class="pagelist__summary">
           {{ words[:20] | join(" ") }}{% if words | length > 20 %}…{% endif %}
-          {% if job.emphasis.strip() %}<br><small>Analysed — {{ job.emphasis.strip().splitlines()|length }} lines of emphasis.</small>{% endif %}
         </p>
       </div>
       <form method="post" action="/jobs/{{ job.id }}/delete"

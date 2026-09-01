@@ -195,6 +195,9 @@ def test_jobs_list_row_shows_a_capped_posting_preview_and_delete(client: TestCli
     assert opening in body  # the preview starts at the opening sentence
     assert "tail59" not in body  # ...and is capped, not the full posting
     assert f"{len(long_posting.split())} words" not in body  # not a bare word count
+    # the row is title + preview + delete only — no analysis status text
+    _jobs.update_job_post(job.id, USER, emphasis="a\n> b\n- c")
+    assert "lines of emphasis" not in client.get("/jobs").text
 
     delete = f'action="/jobs/{job.id}/delete"'
     assert delete in body
