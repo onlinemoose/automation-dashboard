@@ -71,6 +71,18 @@ capability is missing.
    `uv run lint-imports` forbids `prefect` outright until that exception
    is deliberately made.
 
+## Scope discipline
+
+Change **only** what was explicitly requested. When your edit sits next
+to other markup, copy, or logic — in the same block, template, or
+function — do not modify, reformat, reorder, or "tidy" it, and do not
+carry along pre-existing cruft as if it were fine. If an incidental
+change genuinely seems warranted, **stop and ask first**, listing each
+one; never commit unrequested changes. When you do edit a shared block,
+say in one line what you left, changed, or removed beyond the literal
+ask. For UI areas the user wants kept spare, add tests that assert what
+must *not* be there, not just what must.
+
 ## Structure
 
 ```
