@@ -464,6 +464,7 @@ def create_app(
         return render(
             "job_detail.html", request,
             job=job, values={}, errors={}, summary=None, meta=None,
+            edit=request.query_params.get("edit") is not None,
         )
 
     @app.post("/jobs/{job_id}", response_class=HTMLResponse)
@@ -487,7 +488,7 @@ def create_app(
             return render(
                 "job_detail.html", request, status_code=422,
                 job=job, values={"title": title, "posting": posting, "emphasis": emphasis},
-                errors=errors, summary=None, meta=None,
+                errors=errors, summary=None, meta=None, edit=True,
             )
         updated = await run_in_threadpool(
             lambda: _jobs.update_job_post(
@@ -514,7 +515,7 @@ def create_app(
             # nothing — and say so instead of rendering an empty result.
             return render(
                 "job_detail.html", request, status_code=502,
-                job=job, values={}, errors={}, summary=None, meta=None,
+                job=job, values={}, errors={}, summary=None, meta=None, edit=False,
                 notice="The analysis came back empty — nothing was changed. Try again.",
             )
         text = _job_analysis.requirements_to_emphasis_text(analysis)
@@ -534,6 +535,7 @@ def create_app(
         return render(
             "job_detail.html", request,
             job=updated, values={}, errors={}, summary=analysis.summary, meta=meta,
+            edit=False,
         )
 
     @app.post("/jobs/{job_id}/delete", response_class=HTMLResponse)

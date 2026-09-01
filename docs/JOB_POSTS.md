@@ -12,16 +12,27 @@ picked id into `job_posting` text and an `emphasis` list.
 ## The workflow
 
 1. **Job posts → New job post** — paste the posting, give it a title.
-2. On the job's page, **Analyse posting** — fills the emphasis box with the
+2. The job's page opens in a **reading** view: the posting shown for
+   reading, with **Edit** (fix a typo in the title/posting) and
+   **Analyse posting**. Analysing fills the emphasis box with the
    requirements the posting implies, each on its own block with a `>` line
    quoting the span of the posting it comes from and an empty `-` line for
-   your note. Re-analysing replaces the list.
-3. **Annotate** — after each `>` line, write your own comment on a line
+   your note.
+3. Once analysed, the page switches to a **working** view: the posting is
+   settled and shown read-only, and only the emphasis list is editable.
+   **Annotate** — after each `>` line, write your own comment on a line
    starting `-`: where the point resonates with your experience, or where
-   it's a gap. **Save.**
+   it's a gap. **Save.** **Re-analyse posting** replaces the list (it
+   asks first).
 4. On **Cover Letter Writer** / **CV Writer**, pick the job in **Load a
    saved job post**. It fills `job_posting` and `emphasis` from the store
    and overrides the two boxes below. Run.
+
+The detail screen is three states, chosen by `job.emphasis` (empty vs not)
+and an `?edit=1` query flag: **reading** (Edit + Analyse), **edit**
+(editable title/posting, only before the first analysis), **working**
+(read-only posting + editable emphasis, Re-analyse + Save). To change the
+posting text *after* analysing, delete the post and add it again.
 
 ## Where it lives
 
@@ -153,8 +164,11 @@ for local dev and tests; set the vars for anything real.
 ## Notes / limits
 
 - **Analyse overwrites the emphasis box.** It's step 2 of the workflow —
-  analyse, then annotate, then Save. The page asks for confirmation before
-  re-analysing a list that already has content.
+  analyse, then annotate, then Save. Re-analysing (only offered once the
+  list has content) asks for confirmation first.
+- **The posting is only editable before the first analysis.** After that
+  the detail screen shows it read-only; changing it means deleting the
+  post and re-adding it.
 - **No async.** Analysis and the store calls are synchronous and wrapped in
   `run_in_threadpool`, like the writer `run()` and the Background documents
   store.

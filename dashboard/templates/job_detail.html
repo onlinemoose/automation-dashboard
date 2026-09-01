@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ job.title }} — Job post — Automation Dashboard{% endblock %}
 {% block main %}
+{% set analysed = job.emphasis.strip() %}
 <section class="panel">
   <p class="crumb"><a href="/jobs">&larr; Job posts</a></p>
   <h1>{{ job.title }}</h1>
@@ -25,20 +26,10 @@
   </footer>
   {% endif %}
 
-  <h2>Analyse</h2>
-  <p class="help">
-    Sends the posting below for analysis and fills the emphasis list with the
-    10–15 requirements the hiring manager is most likely weighing, each anchored
-    to the span of the posting it comes from. It replaces whatever is in the
-    emphasis box, so analyse first, then annotate.
-  </p>
-  <form method="post" action="/jobs/{{ job.id }}/analyse"
-        {% if job.emphasis.strip() %}onsubmit="return confirm('Replace the emphasis list with a fresh analysis? Your notes will be lost.')"{% endif %}>
-    <button type="submit">{% if job.emphasis.strip() %}Re-analyse posting{% else %}Analyse posting{% endif %}</button>
-  </form>
-
-  <h2>Posting &amp; emphasis</h2>
+  {% if not analysed and edit %}
+  {# Edit state — fix the posting before analysing. #}
   <form method="post" action="/jobs/{{ job.id }}">
+    <input type="hidden" name="emphasis" value="{{ job.emphasis }}">
     <div class="field{% if 'title' in errors %} field--error{% endif %}">
       <label for="title">Title <span class="req" title="required">*</span></label>
       <input type="text" id="title" name="title" value="{{ values.get('title', job.title) }}" required>
@@ -49,6 +40,38 @@
       <textarea id="posting" name="posting" rows="14" required>{{ values.get('posting', job.posting) }}</textarea>
       {% if 'posting' in errors %}<p class="error">{{ errors['posting'] }}</p>{% endif %}
     </div>
+    <div class="form-actions">
+      <a class="button button--ghost" href="/jobs/{{ job.id }}">Cancel</a>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+
+  {% elif not analysed %}
+  {# Reading state — view the post, then analyse it. #}
+  <div class="field">
+    <span class="field__label">Job posting</span>
+    <div class="posting-readonly">{{ job.posting }}</div>
+  </div>
+  <p class="help">
+    Analysing fills an emphasis list with the requirements the hiring manager is
+    most likely weighing, each anchored to the span of the posting it comes from.
+  </p>
+  <div class="form-actions">
+    <a class="button button--ghost" href="/jobs/{{ job.id }}?edit=1">Edit</a>
+    <form method="post" action="/jobs/{{ job.id }}/analyse">
+      <button type="submit">Analyse posting</button>
+    </form>
+  </div>
+
+  {% else %}
+  {# Working state — the posting is settled; annotate the emphasis list. #}
+  <div class="field">
+    <span class="field__label">Job posting</span>
+    <div class="posting-readonly">{{ job.posting }}</div>
+  </div>
+  <form method="post" action="/jobs/{{ job.id }}">
+    <input type="hidden" name="title" value="{{ job.title }}">
+    <input type="hidden" name="posting" value="{{ job.posting }}">
     <div class="field">
       <label for="emphasis">Emphasis</label>
       <p class="help">
@@ -60,7 +83,12 @@
       <textarea id="emphasis" name="emphasis" rows="18"
                 placeholder="Lead with evidence you can do the core job&#10;&gt; the exact requirement text from the posting&#10;- I did exactly this at Acme in 2023 — strong match">{{ values.get('emphasis', job.emphasis) }}</textarea>
     </div>
-    <button type="submit">Save</button>
+    <div class="form-actions">
+      <button type="submit" class="button--ghost" formaction="/jobs/{{ job.id }}/analyse" formnovalidate
+              onclick="return confirm('Replace the emphasis list with a fresh analysis? Your notes will be lost.')">Re-analyse posting</button>
+      <button type="submit">Save</button>
+    </div>
   </form>
+  {% endif %}
 </section>
 {% endblock %}

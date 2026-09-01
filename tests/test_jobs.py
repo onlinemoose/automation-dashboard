@@ -212,11 +212,32 @@ def test_create_redirects_to_detail(client: TestClient) -> None:
     assert resp.headers["location"] == f"/jobs/{job.id}"
 
 
-def test_detail_offers_analyse(client: TestClient) -> None:
+def test_unanalysed_post_reads_and_offers_edit_and_analyse(client: TestClient) -> None:
     job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     body = client.get(f"/jobs/{job.id}").text
+    # The posting is shown for reading, not as an editable form.
+    assert "Own the roadmap" in body
+    assert 'id="posting"' not in body
+    assert 'id="emphasis"' not in body
+    # ...with an Edit link and an Analyse button.
+    assert f'href="/jobs/{job.id}?edit=1"' in body
     assert f'action="/jobs/{job.id}/analyse"' in body
-    assert 'name="emphasis"' in body
+
+
+def test_edit_mode_shows_the_posting_form(client: TestClient) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    body = client.get(f"/jobs/{job.id}?edit=1").text
+    assert 'id="title"' in body
+    assert 'id="posting"' in body
+
+
+def test_analysed_post_shows_the_emphasis_editor_not_the_posting(client: TestClient) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    assert client.post(f"/jobs/{job.id}/analyse").status_code == 200
+    body = client.get(f"/jobs/{job.id}").text
+    assert 'id="emphasis"' in body  # the annotation list stays editable
+    assert 'id="posting"' not in body  # the posting is settled, shown read-only
+    assert f'formaction="/jobs/{job.id}/analyse"' in body  # re-analyse still offered
 
 
 def test_analyse_fills_the_emphasis_list(client: TestClient) -> None:

@@ -3,6 +3,28 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Job post detail screen split into read / edit / work states
+
+Branch `new-user-flow`. `/jobs/{job_id}` no longer opens as a wall of
+editable textareas. It is now three states, chosen by `job.emphasis`
+(empty vs not) and an `?edit=1` query flag:
+
+- **Reading** (saved, never analysed) — the posting is shown read-only
+  with an **Edit** link and an **Analyse posting** button, grouped in a
+  bottom-right `.form-actions` row.
+- **Edit** (`?edit=1`, still unanalysed; also the target of a save
+  validation error) — editable title + posting, **Cancel** / **Save**.
+- **Working** (analysed) — posting read-only, only the emphasis list
+  editable; **Re-analyse posting** (confirm) + **Save**. The save form
+  carries `title`/`posting` as hidden inputs so `job_save` is unchanged;
+  Re-analyse is a second submit button using `formaction`.
+
+New CSS: `.form-actions` (right-aligned button row, modelled on
+`.draft__actions`) and `.posting-readonly`. `job_detail` /`job_save`
+pass an `edit` flag to the template; no route changes. To edit a
+posting after analysis you must delete and re-add the post — noted in
+`docs/JOB_POSTS.md`.
+
 ## 2026-09-01 — Homepage reframed around the Job Application Co-Pilot
 
 Branch `new-user-flow`. First cut at a task-first entry point instead of a
