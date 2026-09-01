@@ -182,11 +182,21 @@ def test_another_users_job_id_cannot_be_smuggled_into_a_run(monkeypatch) -> None
 # --- the screens ---------------------------------------------------------
 
 
-def test_jobs_page_lists_saved(client: TestClient) -> None:
-    _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+def test_jobs_list_row_shows_title_word_count_and_delete(client: TestClient) -> None:
+    """Each row is kept spare: the title, an "NN words" size, and a delete
+    button rendered to the right of the row body — no posting dump."""
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     body = client.get("/jobs").text
+
     assert "Acme — Product Lead" in body
-    assert "Own the roadmap" in body
+    assert f"{len(POSTING.split())} words" in body
+    assert "Own the roadmap" not in body  # the posting text is not spilled here
+
+    delete = f'action="/jobs/{job.id}/delete"'
+    assert delete in body
+    assert "button--danger" in body
+    # the delete form comes after the row body -> it sits on the right
+    assert body.index("pagelist__body") < body.index(delete)
 
 
 def test_new_job_form_renders(client: TestClient) -> None:

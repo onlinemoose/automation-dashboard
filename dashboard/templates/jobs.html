@@ -19,7 +19,7 @@
       <div class="pagelist__body">
         <a href="/jobs/{{ job.id }}"><span class="pagelist__title">{{ job.title }}</span></a>
         <p class="pagelist__summary">
-          {{ job.posting[:160] }}{% if job.posting|length > 160 %}…{% endif %}
+          {{ job.posting.split() | length }} words
           {% if job.emphasis.strip() %}<br><small>Analysed — {{ job.emphasis.strip().splitlines()|length }} lines of emphasis.</small>{% endif %}
         </p>
       </div>
