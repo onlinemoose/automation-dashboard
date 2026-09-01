@@ -295,6 +295,13 @@ def create_app(
         if page is None:
             raise HTTPException(status_code=404)
         prefill = dict(page.example_form) if request.query_params.get("example") else {}
+        # A link from a saved job post can preselect the "Load a saved job
+        # post" picker (?job_post_id=…). A foreign / unknown id simply won't
+        # match any option, and build_input already ignores one it can't
+        # resolve for this user.
+        picker = next((f.name for f in page.fields if f.widget == "picker"), None)
+        if picker and (jpid := request.query_params.get("job_post_id")):
+            prefill[picker] = jpid
         return render(
             "page.html", request,
             page=page, values=prefill, errors={},

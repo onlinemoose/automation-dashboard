@@ -3,6 +3,24 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Job posts list: icon actions + writer shortcuts
+
+Branch `new-user-flow`.
+
+- Each row on `/jobs` now has an actions cell on the right (rows are
+  top-aligned with the title). The delete button is an icon (still a
+  POST form + confirm). Once a post is analysed, a Cover Letter icon and
+  a CV icon appear to the left of delete, each `title`/`aria-label`ed
+  with the feature name.
+- The writer icons link to `/p/cover-letter-writer?job_post_id=<id>` /
+  `/p/cv-writer?job_post_id=<id>`. `page_form` now honours a
+  `job_post_id` query param — it preselects the picker field, so the
+  posting + emphasis load exactly as picking the job by hand. A foreign
+  or unknown id preselects nothing (`build_input` already ignores an
+  unresolvable id).
+- Icons are inline SVG (first icons in the app); new `.iconbtn` /
+  `.pagelist__actions` CSS.
+
 ## 2026-09-01 — Structured emphasis editor on the analysed job view
 
 Branch `new-user-flow`. The single emphasis textarea on the working view

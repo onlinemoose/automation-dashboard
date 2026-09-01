@@ -75,9 +75,21 @@ h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
 .pagelist a { text-decoration: none; color: var(--accent); }
 .pagelist__summary { margin: 0.25rem 0 0; font-size: 0.95rem; }
 /* Two-column rows: title + summary on the left, an action button right. */
-.pagelist--rows li { display: flex; align-items: center; gap: 2rem; }
+.pagelist--rows li { display: flex; align-items: flex-start; gap: 2rem; }
 .pagelist--rows .pagelist__body { flex: 1; min-width: 0; }
 .pagelist--rows form { margin: 0; flex: none; }
+/* the right-hand cell of row actions: icons, delete rightmost */
+.pagelist__actions { flex: none; display: flex; align-items: center; gap: 0.35rem; }
+.pagelist__actions form { margin: 0; }
+.iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; margin: 0; padding: 0;
+  color: var(--ink-soft); background: transparent;
+  border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer;
+}
+.iconbtn:hover { filter: none; background: var(--bg); color: var(--ink); }
+.iconbtn svg { width: 1.1rem; height: 1.1rem; display: block; }
+.iconbtn--danger:hover { color: var(--red); border-color: var(--red); }
 .toolbar { margin: 1.25rem 0 0.5rem; }
 .field { margin: 1.25rem 0; }
 .field label { display: block; font-weight: 600; margin-bottom: 0.2rem; }

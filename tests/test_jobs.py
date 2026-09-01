@@ -210,9 +210,42 @@ def test_jobs_list_row_shows_a_capped_posting_preview_and_delete(client: TestCli
 
     delete = f'action="/jobs/{job.id}/delete"'
     assert delete in body
-    assert "button--danger" in body
+    assert 'class="iconbtn iconbtn--danger"' in body  # delete is an icon button
+    assert 'aria-label="Delete job post"' in body
     # the delete form comes after the row body -> it sits on the right
     assert body.index("pagelist__body") < body.index(delete)
+
+
+def test_analysed_row_links_to_the_writer_pages_for_that_job(client: TestClient) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+
+    # unanalysed: only the delete icon, no writer links
+    body = client.get("/jobs").text
+    assert "/p/cover-letter-writer?job_post_id=" not in body
+    assert "/p/cv-writer?job_post_id=" not in body
+
+    _jobs.update_job_post(job.id, USER, emphasis="Own the roadmap\n> Own the roadmap\n- strong")
+    body = client.get("/jobs").text
+    assert f'href="/p/cover-letter-writer?job_post_id={job.id}"' in body
+    assert f'href="/p/cv-writer?job_post_id={job.id}"' in body
+    assert 'aria-label="Cover Letter Writer"' in body
+    assert 'aria-label="CV Writer"' in body
+    # the writer icons sit left of the delete icon
+    assert body.index("cover-letter-writer?job_post_id") < body.index(f"/jobs/{job.id}/delete")
+
+
+def test_writer_page_preselects_a_job_from_the_query(client: TestClient) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    body = client.get(f"/p/cover-letter-writer?job_post_id={job.id}").text
+    assert f'value="{job.id}" selected' in body
+
+
+def test_writer_page_ignores_a_foreign_job_in_the_query() -> None:
+    foreign = _jobs.create_job_post("Alpha role", POSTING, "user-a")
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+    body = b.get(f"/p/cover-letter-writer?job_post_id={foreign.id}").text
+    assert "selected" not in body  # not offered, so nothing preselected
+    assert "Alpha role" not in body
 
 
 def test_new_job_form_renders(client: TestClient) -> None:

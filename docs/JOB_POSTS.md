@@ -29,7 +29,15 @@ picked id into `job_posting` text and an `emphasis` list.
    a plain textarea.
 4. On **Cover Letter Writer** / **CV Writer**, pick the job in **Load a
    saved job post**. It fills `job_posting` and `emphasis` from the store
-   and overrides the two boxes below. Run.
+   and overrides the two boxes below. Run. From the **Job posts** list,
+   an analysed row carries shortcut icons straight to each writer with
+   that job preselected (`/p/<writer>?job_post_id=<id>`).
+
+On the **Job posts** list each row has an actions cell on the right:
+a delete icon always; once the post is analysed, a Cover Letter and a CV
+icon appear to its left, each linking to that writer with this job
+preselected (`page_form` honours `?job_post_id=`; a foreign / unknown id
+just preselects nothing).
 
 The detail screen is three states, chosen by `job.emphasis` (empty vs not)
 and an `?edit=1` query flag: **reading** (Edit + Analyse), **edit**
