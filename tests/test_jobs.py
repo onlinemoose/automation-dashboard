@@ -84,12 +84,21 @@ def test_store_crud_roundtrip() -> None:
     assert _jobs.get_job_post(a.id, USER).posting == POSTING
     assert a.emphasis == ""
 
-    # partial update: emphasis only, title/posting untouched
+    assert a.summary == ""
+
+    # partial update: emphasis only, title/posting/summary untouched
     _jobs.update_job_post(a.id, USER, emphasis="Lead with roadmap ownership\n- strong here")
     again = _jobs.get_job_post(a.id, USER)
     assert again.title == "Acme — Product Lead"
     assert again.posting == POSTING
     assert "strong here" in again.emphasis
+
+    # partial update: summary only, emphasis/title/posting untouched
+    _jobs.update_job_post(a.id, USER, summary="## Analysis\nThe key theme is roadmap ownership.")
+    again = _jobs.get_job_post(a.id, USER)
+    assert again.summary == "## Analysis\nThe key theme is roadmap ownership."
+    assert "strong here" in again.emphasis
+    assert again.posting == POSTING
 
     _jobs.delete_job_post(a.id, USER)
     assert _jobs.get_job_post(a.id, USER) is None
@@ -298,6 +307,43 @@ def test_save_persists_annotations(client: TestClient) -> None:
     )
     assert resp.status_code == 303
     assert _jobs.get_job_post(job.id, USER).emphasis == annotated
+
+
+def test_analyse_response_shows_the_summary_and_carries_it_for_saving(
+    client: TestClient,
+) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    body = client.post(f"/jobs/{job.id}/analyse").text
+    assert 'class="markdown"' in body  # the summary is rendered for reading
+    assert 'name="summary"' in body  # ...and sits in the save form as a hidden field
+    # analyse itself does not persist the summary — Save does
+    assert _jobs.get_job_post(job.id, USER).summary == ""
+
+
+def test_save_persists_the_summary_alongside_the_emphasis(client: TestClient) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    client.post(f"/jobs/{job.id}/analyse")  # fills emphasis, shows the summary
+
+    summary_md = "## What this employer is weighing\nRoadmap ownership, top to bottom."
+    resp = client.post(
+        f"/jobs/{job.id}",
+        data={
+            "title": job.title,
+            "posting": job.posting,
+            "emphasis": "Lead with roadmap ownership\n- strong here",
+            "summary": summary_md,
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    saved = _jobs.get_job_post(job.id, USER)
+    assert saved.summary == summary_md
+    assert "strong here" in saved.emphasis
+
+    # and it comes back on the next view of the analysed job
+    body = client.get(f"/jobs/{job.id}").text
+    assert "What this employer is weighing" in body
 
 
 def test_delete_through_the_ui(client: TestClient) -> None:

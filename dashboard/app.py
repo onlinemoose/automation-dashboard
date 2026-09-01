@@ -463,7 +463,7 @@ def create_app(
             raise HTTPException(status_code=404)
         return render(
             "job_detail.html", request,
-            job=job, values={}, errors={}, summary=None, meta=None,
+            job=job, values={}, errors={}, summary=job.summary or None, meta=None,
             edit=request.query_params.get("edit") is not None,
         )
 
@@ -476,6 +476,10 @@ def create_app(
         title = str(form.get("title") or "").strip()
         posting = str(form.get("posting") or "").strip()
         emphasis = str(form.get("emphasis") or "")
+        # The analysis summary is shown read-only on the working view and
+        # carried back in a hidden field so this save persists it alongside
+        # the emphasis the user just edited.
+        summary = str(form.get("summary") or "")
         if not title or not posting:
             job = await run_in_threadpool(_jobs.get_job_post, job_id, uid)
             if job is None:
@@ -488,11 +492,11 @@ def create_app(
             return render(
                 "job_detail.html", request, status_code=422,
                 job=job, values={"title": title, "posting": posting, "emphasis": emphasis},
-                errors=errors, summary=None, meta=None, edit=True,
+                errors=errors, summary=summary or None, meta=None, edit=True,
             )
         updated = await run_in_threadpool(
             lambda: _jobs.update_job_post(
-                job_id, uid, title=title, posting=posting, emphasis=emphasis
+                job_id, uid, title=title, posting=posting, emphasis=emphasis, summary=summary
             )
         )
         if updated is None:

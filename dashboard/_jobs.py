@@ -31,6 +31,7 @@ class JobPost:
     title: str  # user-set label, e.g. "Acme — Product Lead"
     posting: str  # the raw job posting text
     emphasis: str  # the annotated emphasis list (">" quote / "-" note format); "" until analysed
+    summary: str = ""  # the analysis summary (Markdown); "" until analysed and saved
     updated_at: datetime | None = None
     user_id: str = ""  # the Supabase auth.users id that owns this row
 
@@ -56,6 +57,7 @@ class _Backend(Protocol):
         title: str | None = None,
         posting: str | None = None,
         emphasis: str | None = None,
+        summary: str | None = None,
     ) -> JobPost | None: ...
     def delete(self, job_id: str, user_id: str) -> None: ...
 
@@ -88,6 +90,7 @@ class _MemoryBackend:
                 title=title,
                 posting=posting,
                 emphasis="",
+                summary="",
                 updated_at=datetime.now(timezone.utc),
                 user_id=user_id,
             )
@@ -102,6 +105,7 @@ class _MemoryBackend:
         title: str | None = None,
         posting: str | None = None,
         emphasis: str | None = None,
+        summary: str | None = None,
     ) -> JobPost | None:
         with self._lock:
             current = self._jobs.get(job_id)
@@ -114,6 +118,7 @@ class _MemoryBackend:
                 title=current.title if title is None else title,
                 posting=current.posting if posting is None else posting,
                 emphasis=current.emphasis if emphasis is None else emphasis,
+                summary=current.summary if summary is None else summary,
                 updated_at=datetime.now(timezone.utc),
                 user_id=current.user_id,  # the rebuilt row keeps its owner
             )
@@ -143,6 +148,7 @@ class _SupabaseBackend:
             title=row.get("title") or "",
             posting=row.get("posting") or "",
             emphasis=row.get("emphasis") or "",
+            summary=row.get("summary") or "",
             updated_at=_parse_ts(row.get("updated_at")),
             user_id=row.get("user_id") or "",
         )
@@ -179,6 +185,7 @@ class _SupabaseBackend:
         title: str | None = None,
         posting: str | None = None,
         emphasis: str | None = None,
+        summary: str | None = None,
     ) -> JobPost | None:
         payload: dict[str, object] = {"updated_at": datetime.now(timezone.utc).isoformat()}
         if title is not None:
@@ -187,6 +194,8 @@ class _SupabaseBackend:
             payload["posting"] = posting
         if emphasis is not None:
             payload["emphasis"] = emphasis
+        if summary is not None:
+            payload["summary"] = summary
         res = (
             self._table()
             .update(payload)
@@ -260,9 +269,10 @@ def update_job_post(
     title: str | None = None,
     posting: str | None = None,
     emphasis: str | None = None,
+    summary: str | None = None,
 ) -> JobPost | None:
     return _store().update(
-        job_id, user_id, title=title, posting=posting, emphasis=emphasis
+        job_id, user_id, title=title, posting=posting, emphasis=emphasis, summary=summary
     )
 
 

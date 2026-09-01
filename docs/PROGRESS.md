@@ -3,6 +3,27 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Job analysis summary is now saved with the emphasis
+
+Branch `new-user-flow`. The analysis summary used to be shown once on the
+Analyse response and then lost. It now persists:
+
+- New `summary` column on `job_posts` (`text not null default ''`) plus a
+  `JobPost.summary` field, `_jobs.py` backend + `update_job_post` support.
+  **Live Supabase needs a one-line migration** —
+  `alter table job_posts add column if not exists summary text not null
+  default '';` (in `docs/JOB_POSTS.md`).
+- The working view shows the summary read-only at the top and carries it
+  in a hidden `<textarea name="summary">`. `POST /jobs/{id}` (`job_save`)
+  reads it and writes emphasis + summary in one update.
+- **Analyse still does not persist the summary** — only `Save` does (as
+  the user specified). Leaving the page after Analyse without saving
+  loses the summary; the emphasis list is written immediately as before.
+- Cost/token footer stays transient (only on the Analyse response).
+- Tests: store round-trips `summary` on partial update; the Analyse
+  response shows + carries the summary; `Save` persists both and the
+  summary comes back on the next GET.
+
 ## 2026-09-01 — Job post detail screen split into read / edit / work states
 
 Branch `new-user-flow`. `/jobs/{job_id}` no longer opens as a wall of

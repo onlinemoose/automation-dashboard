@@ -14,16 +14,16 @@ picked id into `job_posting` text and an `emphasis` list.
 1. **Job posts → New job post** — paste the posting, give it a title.
 2. The job's page opens in a **reading** view: the posting shown for
    reading, with **Edit** (fix a typo in the title/posting) and
-   **Analyse posting**. Analysing fills the emphasis box with the
-   requirements the posting implies, each on its own block with a `>` line
-   quoting the span of the posting it comes from and an empty `-` line for
-   your note.
-3. Once analysed, the page switches to a **working** view: the posting is
-   settled and shown read-only, and only the emphasis list is editable.
+   **Analyse posting**. Analysing produces two things — a prose **summary**
+   of what the hiring manager is weighing, and the **emphasis** list (one
+   block per requirement, a `>` line quoting the span it comes from and an
+   empty `-` line for your note).
+3. Once analysed, the page switches to a **working** view: the summary is
+   shown read-only at the top, and below it the emphasis list is editable.
    **Annotate** — after each `>` line, write your own comment on a line
    starting `-`: where the point resonates with your experience, or where
-   it's a gap. **Save.** **Re-analyse posting** replaces the list (it
-   asks first).
+   it's a gap. **Save** — this persists the emphasis *and* the summary
+   together. **Re-analyse posting** replaces both (it asks first).
 4. On **Cover Letter Writer** / **CV Writer**, pick the job in **Load a
    saved job post**. It fills `job_posting` and `emphasis` from the store
    and overrides the two boxes below. Run.
@@ -31,8 +31,14 @@ picked id into `job_posting` text and an `emphasis` list.
 The detail screen is three states, chosen by `job.emphasis` (empty vs not)
 and an `?edit=1` query flag: **reading** (Edit + Analyse), **edit**
 (editable title/posting, only before the first analysis), **working**
-(read-only posting + editable emphasis, Re-analyse + Save). To change the
+(read-only summary + editable emphasis, Re-analyse + Save). To change the
 posting text *after* analysing, delete the post and add it again.
+
+The summary lives only in the browser between Analyse and Save — Analyse
+writes the emphasis list to the store but not the summary; the working
+view carries the summary in a hidden field so **Save** writes both. Leave
+the page after Analyse without saving and the summary is gone (the
+emphasis list is not).
 
 ## Where it lives
 
@@ -146,6 +152,7 @@ create table job_posts (
   title      text not null,
   posting    text not null,
   emphasis   text not null default '',
+  summary    text not null default '',
   updated_at timestamptz not null default now(),
   user_id    uuid not null references auth.users(id) on delete cascade
 );
@@ -155,6 +162,17 @@ create index if not exists job_posts_user_id_idx on job_posts (user_id);
 grant all privileges on table job_posts to service_role;
 alter table job_posts enable row level security;
 ```
+
+**Migration for an existing deployment** (the `summary` column was added
+after the table shipped) — run once in the SQL editor:
+
+```sql
+alter table job_posts add column if not exists summary text not null default '';
+```
+
+Adding a `text` column with a constant default is metadata-only on
+Postgres — instant, no table rewrite, no meaningful lock. It inherits the
+table's existing RLS and grants.
 
 Uses `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` (already declared for
 Background documents). If either is missing, `_jobs.py` uses a process-local
@@ -166,6 +184,11 @@ for local dev and tests; set the vars for anything real.
 - **Analyse overwrites the emphasis box.** It's step 2 of the workflow —
   analyse, then annotate, then Save. Re-analysing (only offered once the
   list has content) asks for confirmation first.
+- **The summary is persisted by Save, not by Analyse.** Analyse writes the
+  emphasis list to the store immediately but keeps the summary in a hidden
+  form field; **Save** writes emphasis and summary together. A `summary`
+  column on `job_posts` holds it (see the migration under *Backing
+  store*). It is read-only in the UI.
 - **The posting is only editable before the first analysis.** After that
   the detail screen shows it read-only; changing it means deleting the
   post and re-adding it.

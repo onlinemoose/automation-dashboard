@@ -30,6 +30,7 @@
   {# Edit state — fix the posting before analysing. #}
   <form method="post" action="/jobs/{{ job.id }}">
     <input type="hidden" name="emphasis" value="{{ job.emphasis }}">
+    <textarea name="summary" hidden>{{ job.summary }}</textarea>
     <div class="field{% if 'title' in errors %} field--error{% endif %}">
       <label for="title">Title <span class="req" title="required">*</span></label>
       <input type="text" id="title" name="title" value="{{ values.get('title', job.title) }}" required>
@@ -61,6 +62,7 @@
   <form method="post" action="/jobs/{{ job.id }}">
     <input type="hidden" name="title" value="{{ job.title }}">
     <input type="hidden" name="posting" value="{{ job.posting }}">
+    <textarea name="summary" hidden>{{ summary or job.summary }}</textarea>
     <div class="field">
       <label for="emphasis">Emphasis</label>
       <p class="help">
