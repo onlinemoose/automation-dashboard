@@ -20,7 +20,7 @@
         <a href="/jobs/{{ job.id }}"><span class="pagelist__title">{{ job.title }}</span></a>
         <p class="pagelist__summary">
           {{ job.posting[:160] }}{% if job.posting|length > 160 %}…{% endif %}
-          {% if job.emphasis.strip() %}<br><small>Analysed — {{ job.emphasis.strip().splitlines()|length }} lines of emphasis.</small>{% else %}<br><small>Not analysed yet.</small>{% endif %}
+          {% if job.emphasis.strip() %}<br><small>Analysed — {{ job.emphasis.strip().splitlines()|length }} lines of emphasis.</small>{% endif %}
         </p>
       </div>
       <form method="post" action="/jobs/{{ job.id }}/delete"
