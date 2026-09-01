@@ -48,7 +48,6 @@
 
   {% elif not analysed %}
   {# Reading state — view the post, then analyse it. #}
-  <h2>Job posting</h2>
   <p class="posting-readonly">{{ job.posting }}</p>
   <div class="form-actions">
     <a class="button button--ghost" href="/jobs/{{ job.id }}?edit=1">Edit</a>
@@ -59,7 +58,6 @@
 
   {% else %}
   {# Working state — the posting is settled; annotate the emphasis list. #}
-  <h2>Job posting</h2>
   <p class="posting-readonly">{{ job.posting }}</p>
   <form method="post" action="/jobs/{{ job.id }}">
     <input type="hidden" name="title" value="{{ job.title }}">
