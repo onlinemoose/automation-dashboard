@@ -257,12 +257,14 @@ def test_edit_mode_shows_the_posting_form(client: TestClient) -> None:
     assert 'id="posting"' in body
 
 
-def test_analysed_post_shows_the_emphasis_editor_not_the_posting(client: TestClient) -> None:
+def test_analysed_post_shows_the_structured_emphasis_editor(client: TestClient) -> None:
     job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     assert client.post(f"/jobs/{job.id}/analyse").status_code == 200
     body = client.get(f"/jobs/{job.id}").text
-    assert 'id="emphasis"' in body  # the annotation list stays editable
-    assert 'id="posting"' not in body  # the posting is settled, shown read-only
+    assert 'class="emphasis-item"' in body  # one card per analysed requirement
+    assert 'name="item_count"' in body  # the rows round-trip through the save
+    assert 'name="note_0"' in body  # ...with an editable note per row
+    assert 'id="posting"' not in body  # the posting is settled, not shown
     assert f'formaction="/jobs/{job.id}/analyse"' in body  # re-analyse still offered
 
 
@@ -346,6 +348,41 @@ def test_save_persists_the_summary_alongside_the_emphasis(client: TestClient) ->
     assert "What this employer is weighing" in body
 
 
+def test_save_from_the_structured_editor_persists_canonical_emphasis(
+    client: TestClient,
+) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    client.post(f"/jobs/{job.id}/analyse")  # fills the emphasis list
+
+    # the structured editor posts the analysed rows back as hidden fields
+    # plus one editable note per row
+    resp = client.post(
+        f"/jobs/{job.id}",
+        data={
+            "title": job.title,
+            "posting": job.posting,
+            "summary": "",
+            "item_count": "1",
+            "req_0": "Own the roadmap end to end",
+            "tag_0": "must-have",
+            "quote_0": "Own the roadmap",
+            "note_0": "Led this at Bract for two years",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    stored = _jobs.get_job_post(job.id, USER).emphasis
+    assert stored == (
+        "[must-have] Own the roadmap end to end\n"
+        "> Own the roadmap\n"
+        "- Led this at Bract for two years\n"
+    )
+    # and it still reads back for the writer pages
+    (point,) = _job_analysis.parse_annotated_emphasis(stored)
+    assert "Candidate note: Led this at Bract for two years" in point.point
+
+
 def test_delete_through_the_ui(client: TestClient) -> None:
     job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     resp = client.post(f"/jobs/{job.id}/delete", follow_redirects=False)
@@ -392,6 +429,40 @@ def test_analysis_text_round_trips_without_notes() -> None:
     assert len(points) == len(analysis.requirements)
     assert points[0].quote  # the quoted span survives
     assert "Candidate note:" not in points[0].point  # empty "- " slots add nothing
+
+
+def test_parse_emphasis_items_reads_tag_quote_and_note() -> None:
+    text = (
+        "[must-have] Own the roadmap end to end\n"
+        "> you will own the product roadmap\n"
+        "- I led the roadmap at Bract for two years\n"
+    )
+    (item,) = _job_analysis.parse_emphasis_items(text)
+    assert item.importance == "must-have"
+    assert item.requirement == "Own the roadmap end to end"
+    assert item.quote == "you will own the product roadmap"
+    assert item.note == "I led the roadmap at Bract for two years"
+
+
+def test_emphasis_items_round_trip_matches_the_canonical_text() -> None:
+    original = _job_analysis.requirements_to_emphasis_text(_job_analysis.analyse(POSTING))
+    items = _job_analysis.parse_emphasis_items(original)
+    assert _job_analysis.emphasis_items_to_text(items) == original
+
+
+def test_emphasis_items_to_text_is_read_back_by_the_writer_parse() -> None:
+    items = [
+        _job_analysis.EmphasisItem(
+            requirement="Own the roadmap",
+            quote="own the product roadmap",
+            importance="must-have",
+            note="did this at Bract",
+        )
+    ]
+    text = _job_analysis.emphasis_items_to_text(items)
+    (point,) = _job_analysis.parse_annotated_emphasis(text)
+    assert point.quote == "own the product roadmap"
+    assert "Candidate note: did this at Bract" in point.point
 
 
 # --- wiring into a writer page ------------------------------------------

@@ -3,6 +3,27 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Structured emphasis editor on the analysed job view
+
+Branch `new-user-flow`. The single emphasis textarea on the working view
+is replaced by one card per requirement: an importance pill (`must-have`
+/ `strong` / `nice-to-have`), the requirement sentence, the quoted span
+(all read-only), and an editable **note** box.
+
+- New in `_job_analysis.py`: `EmphasisItem`, `parse_emphasis_items()`,
+  `emphasis_items_to_text()` — the round-trip between the annotated
+  `emphasis` text and structured rows, lossless for the canonical format.
+- **No JavaScript.** Each card's read-only fields ride back as hidden
+  inputs (`req_N` / `tag_N` / `quote_N`) with `item_count`; `job_save`
+  detects those and reassembles the canonical text. The plain `emphasis`
+  field still drives the edit-state form and any non-structured post, and
+  a hand-typed / unparseable emphasis falls back to the textarea.
+- Storage format, the writer-page parse, summary persistence and
+  Re-analyse are all unchanged.
+- `test_analysed_post_shows_the_emphasis_editor_not_the_posting` became
+  `test_analysed_post_shows_the_structured_emphasis_editor`; added
+  parse/serialise round-trip tests and a structured-save HTTP test.
+
 ## 2026-09-01 — Job analysis summary is now saved with the emphasis
 
 Branch `new-user-flow`. The analysis summary used to be shown once on the

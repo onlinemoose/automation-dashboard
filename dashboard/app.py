@@ -464,6 +464,7 @@ def create_app(
         return render(
             "job_detail.html", request,
             job=job, values={}, errors={}, summary=job.summary or None, meta=None,
+            emphasis_items=_job_analysis.parse_emphasis_items(job.emphasis),
             edit=request.query_params.get("edit") is not None,
         )
 
@@ -476,6 +477,27 @@ def create_app(
         title = str(form.get("title") or "").strip()
         posting = str(form.get("posting") or "").strip()
         emphasis = str(form.get("emphasis") or "")
+        # The structured emphasis editor posts each analysed row as hidden
+        # fields (req_/tag_/quote_) plus one editable note_ per row;
+        # reassemble them into the canonical emphasis text so storage and the
+        # writer-page parse are unchanged. The plain "emphasis" field is
+        # still what the edit-state form and non-structured posts send.
+        try:
+            item_count = int(form.get("item_count"))
+        except (TypeError, ValueError):
+            item_count = None
+        if item_count is not None:
+            emphasis = _job_analysis.emphasis_items_to_text(
+                [
+                    _job_analysis.EmphasisItem(
+                        requirement=str(form.get(f"req_{i}") or ""),
+                        quote=str(form.get(f"quote_{i}") or ""),
+                        importance=str(form.get(f"tag_{i}") or ""),
+                        note=str(form.get(f"note_{i}") or ""),
+                    )
+                    for i in range(item_count)
+                ]
+            )
         # The analysis summary is shown read-only on the working view and
         # carried back in a hidden field so this save persists it alongside
         # the emphasis the user just edited.
@@ -493,6 +515,7 @@ def create_app(
                 "job_detail.html", request, status_code=422,
                 job=job, values={"title": title, "posting": posting, "emphasis": emphasis},
                 errors=errors, summary=summary or None, meta=None, edit=True,
+                emphasis_items=_job_analysis.parse_emphasis_items(job.emphasis),
             )
         updated = await run_in_threadpool(
             lambda: _jobs.update_job_post(
@@ -520,6 +543,7 @@ def create_app(
             return render(
                 "job_detail.html", request, status_code=502,
                 job=job, values={}, errors={}, summary=None, meta=None, edit=False,
+                emphasis_items=_job_analysis.parse_emphasis_items(job.emphasis),
                 notice="The analysis came back empty — nothing was changed. Try again.",
             )
         text = _job_analysis.requirements_to_emphasis_text(analysis)
@@ -539,6 +563,7 @@ def create_app(
         return render(
             "job_detail.html", request,
             job=updated, values={}, errors={}, summary=analysis.summary, meta=meta,
+            emphasis_items=_job_analysis.parse_emphasis_items(updated.emphasis),
             edit=False,
         )
 

@@ -69,6 +69,20 @@ class EmphasisPoint:
     quote: str | None = None
 
 
+@dataclass(frozen=True)
+class EmphasisItem:
+    """One requirement as shown in the structured emphasis editor: the
+    analysis output (``requirement`` / ``quote`` / ``importance``, read-only)
+    plus the candidate's editable ``note``. Round-trips to and from the
+    annotated ``emphasis`` text via :func:`parse_emphasis_items` /
+    :func:`emphasis_items_to_text`."""
+
+    requirement: str
+    quote: str = ""
+    importance: str = ""  # "" | "must-have" | "strong" | "nice-to-have"
+    note: str = ""
+
+
 # --- the analysis step (the job-analyst capability) ----------------------
 
 # job-analyst ranks on "critical" | "high" | "medium" | "low"; the
@@ -145,11 +159,23 @@ def requirements_to_emphasis_text(analysis: Analysis) -> str:
     return "\n\n".join(blocks) + ("\n" if blocks else "")
 
 
+_TAGS = ("must-have", "strong", "nice-to-have")
+
+
 def _strip_tag(text: str) -> str:
     """Drop a leading ``[must-have]`` / ``[strong]`` / ``[nice-to-have]`` tag."""
     if text.startswith("[") and "]" in text:
         return text.split("]", 1)[1].strip()
     return text
+
+
+def _tag_of(text: str) -> str:
+    """The importance tag a plain line leads with, or ``""``."""
+    if text.startswith("[") and "]" in text:
+        candidate = text[1 : text.index("]")].strip()
+        if candidate in _TAGS:
+            return candidate
+    return ""
 
 
 def parse_annotated_emphasis(text: str) -> list[EmphasisPoint]:
@@ -204,3 +230,66 @@ def _split_blocks(text: str) -> list[list[str]]:
     if current:
         blocks.append(current)
     return blocks
+
+
+# --- structured emphasis editor <-> annotated text --------------------------
+
+
+def parse_emphasis_items(text: str) -> list[EmphasisItem]:
+    """Parse the annotated ``emphasis`` text into rows for the structured
+    editor. Inverse of :func:`emphasis_items_to_text` for the canonical
+    format :func:`requirements_to_emphasis_text` produces. A block with no
+    ``>``/``-``/``[tag]`` markers still yields one item per plain line, so a
+    hand-typed list degrades to editable rows rather than vanishing."""
+    items: list[EmphasisItem] = []
+    for block in _split_blocks(text):
+        plain: list[str] = []
+        quotes: list[str] = []
+        notes: list[str] = []
+        importance = ""
+        for raw in block:
+            line = raw.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                quotes.append(line[1:].strip().strip('"').strip())
+            elif line.startswith("- ") or line == "-":
+                notes.append(line[1:].strip())
+            else:
+                importance = importance or _tag_of(line)
+                plain.append(_strip_tag(line))
+
+        if not quotes and not notes and not importance:
+            items.extend(EmphasisItem(requirement=p) for p in plain if p)
+            continue
+
+        requirement = " ".join(p for p in plain if p).strip()
+        if not requirement:
+            continue
+        items.append(
+            EmphasisItem(
+                requirement=requirement,
+                quote=" ".join(q for q in quotes if q).strip(),
+                importance=importance,
+                note=" ".join(n for n in notes if n).strip(),
+            )
+        )
+    return items
+
+
+def emphasis_items_to_text(items: list[EmphasisItem]) -> str:
+    """Render structured editor rows back into the annotated ``emphasis``
+    text — the exact shape :func:`requirements_to_emphasis_text` uses, so the
+    stored value and the writer-page parse are unchanged."""
+    blocks: list[str] = []
+    for it in items:
+        req = it.requirement.strip()
+        if not req:
+            continue
+        lines = [f"[{it.importance}] {req}" if it.importance else req]
+        if it.quote.strip():
+            lines.append(f"> {it.quote.strip()}")
+        note = it.note.strip()
+        lines.append(f"- {note}" if note else "- ")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks) + ("\n" if blocks else "")

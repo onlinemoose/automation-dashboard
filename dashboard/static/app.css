@@ -126,6 +126,39 @@ button:hover, .button:hover { filter: brightness(1.05); }
 }
 .form-actions form { margin: 0; }
 .form-actions button, .form-actions .button { margin: 0; }
+/* --- structured emphasis editor (docs/JOB_POSTS.md) --- */
+.emphasis-list {
+  list-style: none; margin: 1rem 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 0.85rem;
+}
+.emphasis-item {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.9rem 1rem; background: var(--panel);
+}
+.emphasis-item__tag {
+  display: inline-block; margin-bottom: 0.45rem;
+  padding: 0.12rem 0.5rem; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  background: var(--line); color: var(--ink-soft);
+}
+.emphasis-item__tag--must-have { background: var(--red); color: #fff; }
+.emphasis-item__tag--strong { background: var(--accent); color: #fff; }
+.emphasis-item__req { margin: 0; font-weight: 600; line-height: 1.4; }
+.emphasis-item__quote {
+  margin: 0.55rem 0 0; padding-left: 0.75rem;
+  border-left: 3px solid var(--line); color: var(--ink-soft);
+  font-size: 0.92rem; font-style: italic;
+}
+.emphasis-item__note { margin-top: 0.7rem; }
+.emphasis-item__note label {
+  display: block; font-size: 0.8rem; font-weight: 600; color: var(--ink-soft);
+  margin-bottom: 0.2rem;
+}
+.emphasis-item__note textarea {
+  width: 100%; padding: 0.5rem 0.6rem; font: inherit; color: inherit;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+  resize: vertical;
+}
 .runmeta {
   margin: 2rem 0 0; padding: 0.9rem 0 0; border-top: 1px solid var(--line);
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 1rem;

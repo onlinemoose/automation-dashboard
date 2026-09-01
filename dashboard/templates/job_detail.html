@@ -63,6 +63,32 @@
     <input type="hidden" name="title" value="{{ job.title }}">
     <input type="hidden" name="posting" value="{{ job.posting }}">
     <textarea name="summary" hidden>{{ summary or job.summary }}</textarea>
+
+    {% if emphasis_items %}
+    <h2>Emphasis</h2>
+    <input type="hidden" name="item_count" value="{{ emphasis_items | length }}">
+    <ol class="emphasis-list">
+      {% for it in emphasis_items %}
+      <li class="emphasis-item">
+        <input type="hidden" name="req_{{ loop.index0 }}" value="{{ it.requirement }}">
+        <input type="hidden" name="tag_{{ loop.index0 }}" value="{{ it.importance }}">
+        <input type="hidden" name="quote_{{ loop.index0 }}" value="{{ it.quote }}">
+        {% if it.importance %}
+        <span class="emphasis-item__tag emphasis-item__tag--{{ it.importance }}">{{ it.importance.replace("-", " ") }}</span>
+        {% endif %}
+        <p class="emphasis-item__req">{{ it.requirement }}</p>
+        {% if it.quote %}
+        <p class="emphasis-item__quote">{{ it.quote }}</p>
+        {% endif %}
+        <div class="emphasis-item__note">
+          <label for="note_{{ loop.index0 }}">Your note</label>
+          <textarea id="note_{{ loop.index0 }}" name="note_{{ loop.index0 }}" rows="2"
+                    placeholder="Where you're strong on this, or where it's a gap.">{{ it.note }}</textarea>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
     <div class="field">
       <label for="emphasis">Emphasis</label>
       <p class="help">
@@ -74,6 +100,8 @@
       <textarea id="emphasis" name="emphasis" rows="18"
                 placeholder="Lead with evidence you can do the core job&#10;&gt; the exact requirement text from the posting&#10;- I did exactly this at Acme in 2023 — strong match">{{ values.get('emphasis', job.emphasis) }}</textarea>
     </div>
+    {% endif %}
+
     <div class="form-actions">
       <button type="submit" class="button--ghost" formaction="/jobs/{{ job.id }}/analyse" formnovalidate
               onclick="return confirm('Replace the emphasis list with a fresh analysis? Your notes will be lost.')">Re-analyse posting</button>

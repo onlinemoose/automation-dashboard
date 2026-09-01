@@ -19,11 +19,14 @@ picked id into `job_posting` text and an `emphasis` list.
    block per requirement, a `>` line quoting the span it comes from and an
    empty `-` line for your note).
 3. Once analysed, the page switches to a **working** view: the summary is
-   shown read-only at the top, and below it the emphasis list is editable.
-   **Annotate** — after each `>` line, write your own comment on a line
-   starting `-`: where the point resonates with your experience, or where
-   it's a gap. **Save** — this persists the emphasis *and* the summary
-   together. **Re-analyse posting** replaces both (it asks first).
+   shown read-only at the top, and below it the emphasis list renders as
+   one card per requirement — an importance pill (`must-have` / `strong` /
+   `nice-to-have`), the requirement sentence, the quoted span from the
+   posting (all read-only), and a **note** box. **Annotate** each card —
+   where you're strong, or where it's a gap — then **Save** (persists the
+   emphasis *and* the summary together). **Re-analyse posting** replaces
+   both (it asks first). A hand-typed / unparseable emphasis falls back to
+   a plain textarea.
 4. On **Cover Letter Writer** / **CV Writer**, pick the job in **Load a
    saved job post**. It fills `job_posting` and `emphasis` from the store
    and overrides the two boxes below. Run.
@@ -31,8 +34,17 @@ picked id into `job_posting` text and an `emphasis` list.
 The detail screen is three states, chosen by `job.emphasis` (empty vs not)
 and an `?edit=1` query flag: **reading** (Edit + Analyse), **edit**
 (editable title/posting, only before the first analysis), **working**
-(read-only summary + editable emphasis, Re-analyse + Save). To change the
-posting text *after* analysing, delete the post and add it again.
+(read-only summary + the structured emphasis cards, Re-analyse + Save). To
+change the posting text *after* analysing, delete the post and add it
+again.
+
+The structured editor keeps only the **note** editable. The read-only
+parts of each card ride back as hidden fields (`req_N` / `tag_N` /
+`quote_N`) with `item_count`; `job_save` reassembles them + the notes into
+the canonical emphasis text with `_job_analysis.emphasis_items_to_text()`
+(the inverse of `parse_emphasis_items()`), so the stored value and the
+writer-page parse are byte-for-byte what a plain-textarea save produced.
+No JavaScript.
 
 The summary lives only in the browser between Analyse and Save — Analyse
 writes the emphasis list to the store but not the summary; the working
@@ -125,12 +137,21 @@ Take ML features from prototype to production
 - a `>` line → the exact span of the posting it is anchored to → `Emphasis.quote`
 - a `-` line → your own note
 
-`parse_annotated_emphasis()` turns each block into one `Emphasis`. **v1
-folds the note into `Emphasis.point`** as `"…\n\nCandidate note: …"` — the
-`cover-letter-writer` / `cv-writer` contract has no dedicated
-`candidate_note` field yet (a later follow-up). A block with no `>`/`-`
-markers is read as one requirement per plain line, so a hand-typed
-"one point per line" list still works unchanged.
+A plain line may also lead with an importance tag — `[must-have]`,
+`[strong]`, `[nice-to-have]` — which `requirements_to_emphasis_text()`
+writes and the parsers strip back off.
+
+`parse_annotated_emphasis()` turns each block into one `Emphasis` for the
+writer pages. **v1 folds the note into `Emphasis.point`** as
+`"…\n\nCandidate note: …"` — the `cover-letter-writer` / `cv-writer`
+contract has no dedicated `candidate_note` field yet (a later follow-up).
+A block with no `>`/`-` markers is read as one requirement per plain line,
+so a hand-typed "one point per line" list still works unchanged.
+
+`parse_emphasis_items()` / `emphasis_items_to_text()` are the other pair:
+they split the same text into `EmphasisItem` rows (importance, requirement,
+quote, note — all separate) for the structured editor and join them back,
+losslessly for the canonical format above.
 
 ## `job_post_id` is not a contract argument
 
