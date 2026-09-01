@@ -3,6 +3,15 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Trim the generic capability page chrome
+
+Branch `new-user-flow`. `templates/page.html` (drives every `/p/<slug>`
+page — currently Cover Letter Writer and CV Writer): dropped the
+"← All capabilities" crumb (the top nav covers navigation) and the
+"Load example inputs" link. `example_form` and the `?example=1` prefill
+route are untouched — the suite still relies on them, they're just no
+longer surfaced in the UI.
+
 ## 2026-09-01 — Writer pages drop the free-text Job posting box
 
 Branch `new-user-flow`. Both **Cover Letter Writer** and **CV Writer**

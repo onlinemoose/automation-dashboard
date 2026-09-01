@@ -19,7 +19,7 @@ dependencies, `run()` called directly — and nothing depends on it.
 | `slug` | the URL (`/p/<slug>`) |
 | `title`, `summary` | shown on the index and the page |
 | `fields` | one `Field` per capability `Input` argument — drives the generic form and the generic test |
-| `example_form` | a valid demo submission; also the "Load example" link |
+| `example_form` | a valid demo submission; drives the generic test (a `?example=1` prefill still exists but is no longer linked from the page) |
 | `example_output` | a canned `Output`; lets tests run the page offline |
 | `build_input(form)` | turn the submitted form dict into the capability's `Input` (raise `FormError` for bad input) |
 | `run(input)` | the capability's `run` — the *only* call into it |

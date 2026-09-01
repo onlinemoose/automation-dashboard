@@ -2,12 +2,10 @@
 {% block title %}{{ page.title }} — Automation Dashboard{% endblock %}
 {% block main %}
 <section class="panel">
-  <p class="crumb"><a href="/">&larr; All capabilities</a></p>
   <h1>{{ page.title }}</h1>
   <p class="lede">{{ page.summary }}</p>
 
   {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
-  <p class="hint"><a href="/p/{{ page.slug }}?example=1">Load example inputs</a></p>
 
   <form method="post" action="/p/{{ page.slug }}">
     {% for f in page.fields %}
