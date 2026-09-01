@@ -32,8 +32,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
-from dashboard import _documents, _drafts, _job_analysis, _jobs, _targeted_edit
-from dashboard._auth import is_authed, password_hash, verify_password
+from dashboard import _auth, _documents, _drafts, _job_analysis, _jobs, _targeted_edit
+from dashboard._auth import is_authed
 from dashboard._render import to_html
 from dashboard.pages import PAGES, PAGES_BY_SLUG
 from dashboard.pages._spec import FormError, Page, RunMeta
@@ -115,9 +115,17 @@ def _session_secret() -> str:
     return value
 
 
-def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastAPI:
+def create_app(
+    *,
+    auth_disabled: bool = False,
+    stub_runs: bool = False,
+    as_user: str = "test-user",
+) -> FastAPI:
     app = FastAPI(title="Automation Dashboard")
     app.state.auth_disabled = auth_disabled
+    # Who every request is from while `auth_disabled` — the synthetic id the
+    # app's own stores scope by. Tests set it to check cross-user isolation.
+    app.state.as_user = as_user
     # Stub mode: skip the capability call, render its `example_output`. Lets
     # you click through the whole app with no API key, no cost, no wait.
     app.state.stub_runs = stub_runs or os.environ.get("DASHBOARD_STUB_RUNS", "0") == "1"
@@ -137,6 +145,12 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     templates.env.globals["asset_v"] = _asset_version()
 
     def render(name: str, request: Request, /, status_code: int = 200, **ctx):
+        # Every page's topbar shows who is signed in — inject it once here
+        # rather than in each handler. `_streamed_result` bypasses this and
+        # passes `user_email` explicitly.
+        ctx.setdefault(
+            "user_email", u.email if (u := _auth.current_user(request)) else None
+        )
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
     def guard(request: Request) -> RedirectResponse | None:
@@ -152,16 +166,23 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
 
     @app.get("/login", response_class=HTMLResponse)
     def login_form(request: Request, next: str = "/"):
-        return render("login.html", request, next=next, error=None)
+        return render("login.html", request, next=next, email="", error=None)
 
     @app.post("/login", response_class=HTMLResponse)
     async def login_submit(request: Request):
         form = await request.form()
         next_url = str(form.get("next") or "/")
-        if password_hash() and verify_password(str(form.get("password") or ""), password_hash()):
-            request.session["authed"] = True
+        email = str(form.get("email") or "").strip()
+        password = str(form.get("password") or "")
+        # Supabase Auth is a network call; keep it off the event loop.
+        user = await run_in_threadpool(_auth.sign_in, email, password)
+        if user is not None:
+            request.session["user"] = {"id": user.id, "email": user.email}
             return RedirectResponse(next_url, status_code=303)
-        return render("login.html", request, status_code=401, next=next_url, error="Wrong password.")
+        return render(
+            "login.html", request, status_code=401,
+            next=next_url, email=email, error="Wrong email or password.",
+        )
 
     @app.get("/logout")
     def logout(request: Request):
@@ -176,11 +197,15 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
             return redirect
         return render("index.html", request, pages=PAGES)
 
-    async def _doc_choices(page: Page) -> list:
-        return await run_in_threadpool(_documents.list_documents) if _wants_documents(page) else []
+    async def _doc_choices(page: Page, user_id: str) -> list:
+        if not _wants_documents(page):
+            return []
+        return await run_in_threadpool(_documents.list_documents, user_id)
 
-    async def _job_choices(page: Page) -> list:
-        return await run_in_threadpool(_jobs.list_job_posts) if _wants_jobs(page) else []
+    async def _job_choices(page: Page, user_id: str) -> list:
+        if not _wants_jobs(page):
+            return []
+        return await run_in_threadpool(_jobs.list_job_posts, user_id)
 
     def _result_page(request: Request, page: Page, output: object) -> Response:
         meta = page.run_meta(output) if page.run_meta else None
@@ -204,9 +229,12 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         body, not as a 5xx.
         """
         tpl = templates.get_template
+        # These three render outside `render()`, so the topbar's signed-in
+        # email has to be passed in by hand.
+        user_email = u.email if (u := _auth.current_user(request)) else None
 
         async def body():
-            yield tpl("_running_open.html").render(page=page)
+            yield tpl("_running_open.html").render(page=page, user_email=user_email)
 
             loop = asyncio.get_running_loop()
             updates: asyncio.Queue[int] = asyncio.Queue()
@@ -241,11 +269,14 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
                 output = task.result()
             except Exception as exc:  # noqa: BLE001 - any run() failure, shown in the body
                 _log.exception("slow page %s: run() failed", page.slug)
-                yield tpl("_running_error.html").render(page=page, error=type(exc).__name__)
+                yield tpl("_running_error.html").render(
+                    page=page, error=type(exc).__name__, user_email=user_email,
+                )
                 return
             meta = page.run_meta(output) if page.run_meta else None
             yield tpl("_running_close.html").render(
                 page=page, sections=page.sections(output), meta=meta,
+                user_email=user_email,
             )
 
         return StreamingResponse(
@@ -259,6 +290,7 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def page_form(request: Request, slug: str):
         if (redirect := guard(request)) is not None:
             return redirect
+        uid = _auth.current_user_id(request)  # never None past guard()
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
@@ -266,26 +298,29 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         return render(
             "page.html", request,
             page=page, values=prefill, errors={},
-            documents=await _doc_choices(page), jobs=await _job_choices(page),
+            documents=await _doc_choices(page, uid), jobs=await _job_choices(page, uid),
         )
 
     @app.post("/p/{slug}", response_class=HTMLResponse)
     async def page_submit(request: Request, slug: str):
         if (redirect := guard(request)) is not None:
             return redirect
+        uid = _auth.current_user_id(request)  # never None past guard()
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
         form = _form_values(await request.form(), page)
         try:
             # `build_input` may hit the Background documents store to resolve a
-            # picked id — run it off the event loop like `run()` itself.
-            data = await run_in_threadpool(page.build_input, form)
+            # picked id — run it off the event loop like `run()` itself. It
+            # takes `uid` because those stores are per-user; the capability's
+            # own `Input` never sees it.
+            data = await run_in_threadpool(page.build_input, form, uid)
         except FormError as exc:
             return render(
                 "page.html", request, status_code=422,
                 page=page, values=form, errors=exc.errors,
-                documents=await _doc_choices(page), jobs=await _job_choices(page),
+                documents=await _doc_choices(page, uid), jobs=await _job_choices(page, uid),
             )
         if app.state.stub_runs:
             return _result_page(request, page, page.example_output)  # no capability call
@@ -307,7 +342,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def documents_list(request: Request):
         if (redirect := guard(request)) is not None:
             return redirect
-        docs = await run_in_threadpool(_documents.list_documents)
+        uid = _auth.current_user_id(request)
+        docs = await run_in_threadpool(_documents.list_documents, uid)
         return render("documents.html", request, documents=docs)
 
     @app.get("/documents/new", response_class=HTMLResponse)
@@ -329,14 +365,16 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
                 doc=None, values={"title": title, "body": body},
                 errors={"title": "Title is required."},
             )
-        await run_in_threadpool(_documents.create_document, title, body)
+        uid = _auth.current_user_id(request)
+        await run_in_threadpool(_documents.create_document, title, body, uid)
         return RedirectResponse("/documents", status_code=303)
 
     @app.get("/documents/{doc_id}", response_class=HTMLResponse)
     async def document_edit(request: Request, doc_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        doc = await run_in_threadpool(_documents.get_document, doc_id)
+        uid = _auth.current_user_id(request)
+        doc = await run_in_threadpool(_documents.get_document, doc_id, uid)
         if doc is None:
             raise HTTPException(status_code=404)
         return render(
@@ -348,17 +386,20 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def document_update(request: Request, doc_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
+        uid = _auth.current_user_id(request)
         form = await request.form()
         title = str(form.get("title") or "").strip()
         body = str(form.get("body") or "").strip()
         if not title:
-            doc = await run_in_threadpool(_documents.get_document, doc_id)
+            doc = await run_in_threadpool(_documents.get_document, doc_id, uid)
             return render(
                 "document_form.html", request, status_code=422,
                 doc=doc, values={"title": title, "body": body},
                 errors={"title": "Title is required."},
             )
-        updated = await run_in_threadpool(_documents.update_document, doc_id, title, body)
+        updated = await run_in_threadpool(
+            _documents.update_document, doc_id, title, body, uid
+        )
         if updated is None:
             raise HTTPException(status_code=404)
         return RedirectResponse("/documents", status_code=303)
@@ -367,7 +408,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def document_delete(request: Request, doc_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        await run_in_threadpool(_documents.delete_document, doc_id)
+        uid = _auth.current_user_id(request)
+        await run_in_threadpool(_documents.delete_document, doc_id, uid)
         return RedirectResponse("/documents", status_code=303)
 
     # --- job posts -----------------------------------------------------
@@ -380,7 +422,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def jobs_list(request: Request):
         if (redirect := guard(request)) is not None:
             return redirect
-        jobs = await run_in_threadpool(_jobs.list_job_posts)
+        uid = _auth.current_user_id(request)
+        jobs = await run_in_threadpool(_jobs.list_job_posts, uid)
         return render("jobs.html", request, jobs=jobs)
 
     @app.get("/jobs/new", response_class=HTMLResponse)
@@ -406,14 +449,16 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
                 "job_form.html", request, status_code=422,
                 values={"title": title, "posting": posting}, errors=errors,
             )
-        job = await run_in_threadpool(_jobs.create_job_post, title, posting)
+        uid = _auth.current_user_id(request)
+        job = await run_in_threadpool(_jobs.create_job_post, title, posting, uid)
         return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
     @app.get("/jobs/{job_id}", response_class=HTMLResponse)
     async def job_detail(request: Request, job_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        job = await run_in_threadpool(_jobs.get_job_post, job_id)
+        uid = _auth.current_user_id(request)
+        job = await run_in_threadpool(_jobs.get_job_post, job_id, uid)
         if job is None:
             raise HTTPException(status_code=404)
         return render(
@@ -425,12 +470,13 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def job_save(request: Request, job_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
+        uid = _auth.current_user_id(request)
         form = await request.form()
         title = str(form.get("title") or "").strip()
         posting = str(form.get("posting") or "").strip()
         emphasis = str(form.get("emphasis") or "")
         if not title or not posting:
-            job = await run_in_threadpool(_jobs.get_job_post, job_id)
+            job = await run_in_threadpool(_jobs.get_job_post, job_id, uid)
             if job is None:
                 raise HTTPException(status_code=404)
             errors = {}
@@ -444,8 +490,9 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
                 errors=errors, summary=None, meta=None,
             )
         updated = await run_in_threadpool(
-            _jobs.update_job_post, job_id,
-            title=title, posting=posting, emphasis=emphasis,
+            lambda: _jobs.update_job_post(
+                job_id, uid, title=title, posting=posting, emphasis=emphasis
+            )
         )
         if updated is None:
             raise HTTPException(status_code=404)
@@ -455,7 +502,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def job_analyse(request: Request, job_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        job = await run_in_threadpool(_jobs.get_job_post, job_id)
+        uid = _auth.current_user_id(request)
+        job = await run_in_threadpool(_jobs.get_job_post, job_id, uid)
         if job is None:
             raise HTTPException(status_code=404)
         analysis = await run_in_threadpool(_job_analysis.analyse, job.posting)
@@ -470,7 +518,9 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
                 notice="The analysis came back empty — nothing was changed. Try again.",
             )
         text = _job_analysis.requirements_to_emphasis_text(analysis)
-        updated = await run_in_threadpool(_jobs.update_job_post, job_id, emphasis=text)
+        updated = await run_in_threadpool(
+            lambda: _jobs.update_job_post(job_id, uid, emphasis=text)
+        )
         cost = analysis.cost
         meta = RunMeta(
             capability="job-analyst",
@@ -490,7 +540,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def job_delete(request: Request, job_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        await run_in_threadpool(_jobs.delete_job_post, job_id)
+        uid = _auth.current_user_id(request)
+        await run_in_threadpool(_jobs.delete_job_post, job_id, uid)
         return RedirectResponse("/jobs", status_code=303)
 
     # --- working drafts ------------------------------------------------
@@ -517,8 +568,9 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         text = str(form.get("text") or "")
         if not page_slug or not section or not text.strip():
             raise HTTPException(status_code=422, detail="slug, section and text are required")
+        uid = _auth.current_user_id(request)
         draft = await run_in_threadpool(
-            _drafts.create_or_get_draft, page_slug, section, text
+            _drafts.create_or_get_draft, page_slug, section, text, uid
         )
         return RedirectResponse(f"/drafts/{draft.id}", status_code=303)
 
@@ -526,7 +578,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def draft_edit(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
         if draft is None:
             raise HTTPException(status_code=404)
         return render(
@@ -540,7 +593,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def draft_revise(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
         if draft is None:
             raise HTTPException(status_code=404)
         form = await request.form()
@@ -591,7 +645,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def draft_accept(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
         if draft is None:
             raise HTTPException(status_code=404)
         form = await request.form()
@@ -620,6 +675,7 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
         updated = await run_in_threadpool(
             lambda: _drafts.record_revision(
                 draft_id,
+                uid,
                 instruction=instruction,
                 selection=selection,
                 span_start=span_start,
@@ -637,7 +693,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def draft_undo(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        updated = await run_in_threadpool(_drafts.undo_last, draft_id)
+        uid = _auth.current_user_id(request)
+        updated = await run_in_threadpool(_drafts.undo_last, draft_id, uid)
         if updated is None:
             raise HTTPException(status_code=404)
         return JSONResponse(_draft_state(updated))
@@ -646,7 +703,8 @@ def create_app(*, auth_disabled: bool = False, stub_runs: bool = False) -> FastA
     async def draft_download(request: Request, draft_id: str):
         if (redirect := guard(request)) is not None:
             return redirect
-        draft = await run_in_threadpool(_drafts.get_draft, draft_id)
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
         if draft is None:
             raise HTTPException(status_code=404)
         name = f"{draft.slug}-{draft.section}".strip("-") or "draft"

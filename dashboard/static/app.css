@@ -37,6 +37,10 @@ body {
 .topbar nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
 .topbar nav a + a { margin-left: 1rem; }
 .topbar nav a:hover { color: var(--ink); }
+/* Who is signed in. Sits between the nav links and "Sign out", so it
+   carries the spacing the `a + a` rule above no longer supplies there. */
+.topbar__user { color: var(--ink-soft); font-size: 0.9rem; margin-left: 1rem; }
+.topbar nav .topbar__user + a { margin-left: 1rem; }
 main { padding: 2rem 1.25rem 4rem; }
 .stubbanner {
   margin: 0; padding: 0.6rem 1.25rem; font-size: 0.85rem;

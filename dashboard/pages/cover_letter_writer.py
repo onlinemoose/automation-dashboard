@@ -143,13 +143,14 @@ EXAMPLE_OUTPUT = Output(
 )
 
 
-def build_input(form) -> Input:
+def build_input(form, user_id: str) -> Input:
     r = FormReader(form)
     # `job_post_id` is a key into the app's own Job posts store (like
     # `background_document_ids`), not a contract argument. When set it fills
     # `job_posting` and `emphasis` from the analysed, annotated posting.
+    # Those stores are per-user, hence `user_id` — it never reaches `Input`.
     job_post_id = r.text("job_post_id", "Saved job post")
-    job_post = _jobs.get_job_post(job_post_id) if job_post_id else None
+    job_post = _jobs.get_job_post(job_post_id, user_id) if job_post_id else None
     if job_post is not None:
         job_posting = job_post.posting
         emphasis_source = job_post.emphasis
@@ -166,7 +167,7 @@ def build_input(form) -> Input:
     ]
     # `background_document_ids` are keys into the app's own Background documents
     # store; resolve them to text and fold into the contract's `background_documents`.
-    saved = _documents.get_documents(r.multi("background_document_ids"))
+    saved = _documents.get_documents(r.multi("background_document_ids"), user_id)
     background = r.text("background_documents", "Background notes")
     max_words = r.integer("max_words", "Max words")
     salary_expectation = r.integer("salary_expectation", "Salary expectation")

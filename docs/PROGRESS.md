@@ -3,6 +3,72 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Supabase Auth + per-user data isolation
+
+Branch `feat/supabase-auth-user-scoping`. Real accounts via Supabase
+Auth, and every row in the app's three own stores scoped to the user who
+created it. 98 tests pass, `lint-imports` clean.
+
+**What shipped**
+
+- **Auth** (`dashboard/_auth.py`) — email + password against Supabase
+  Auth using the *anon* key. `AuthedUser(id, email)`, a backend protocol
+  with a Supabase and an offline implementation, `sign_in`,
+  `current_user`, `current_user_id`. The signed session cookie now holds
+  `{"user": {"id", "email"}}` and `is_authed` reads it. The scrypt
+  helpers stay, used only by the offline/dev login.
+- **Scoping** (`_documents.py`, `_jobs.py`, `_drafts.py`) — `user_id` is
+  the last required argument of every backend method and public
+  function, no default, so a missed call site is a `TypeError` at
+  collection time. Both the read and the write are filtered in each
+  method; the in-memory backends mirror the Supabase behaviour exactly.
+- **The page seam** — `build_input(form, user_id)`. App plumbing on the
+  seam that already carries `job_post_id` and `background_document_ids`;
+  the capability `Input` never sees it. No route added or removed.
+
+**Before this deploys**
+
+1. **Run `docs/migrations/2026-09-01_user_scoping.sql`** in the Supabase
+   SQL editor if you have not already. It truncates the three tables,
+   adds `user_id`, swaps the `drafts` unique constraint for the
+   per-user one, and indexes `user_id`. It carries its own rollback,
+   which cannot restore truncated rows.
+2. **Add `SUPABASE_ANON_KEY` to `.env`** — required. Without it the app
+   silently falls back to the offline login. `DASHBOARD_DEV_EMAIL` is
+   optional and dev-only. Both are documented in `.env.example`.
+3. **Existing sessions invalidate once.** A cookie from before accounts
+   has `authed` but no `user`, so it reads as signed out — one redirect
+   to `/login`. Expected, no action.
+4. **Verify two-account isolation by hand** — sign in as each of two
+   Supabase accounts and confirm neither sees the other's documents, job
+   posts or drafts. The Supabase code paths were written by analogy to
+   the existing `_SupabaseBackend` methods and are the one part the test
+   suite cannot reach.
+
+**Deferred**
+
+- **Magic link** — not implemented. Email + password ships first; the
+  magic-link flow needs interactive verification of the redirect URL.
+  See `docs/USER_SCOPING.md`.
+- **RLS policies keyed to `auth.uid()`** — future hardening, out of
+  scope. The `service_role` key bypasses them, so they add nothing until
+  the app stops using it. Scoping is enforced in the application layer.
+
+**Notes**
+
+- Every scoping test was checked by mutation: the filter removed, the
+  test confirmed red, the filter restored. Worth keeping up — a scoping
+  test that cannot fail is worse than none.
+- Jinja escapes `'` to `&#39;`, so `assert "A's note" not in resp.text`
+  passes whether or not scoping works. Caught one such false pass;
+  fixtures now avoid apostrophes.
+- This work was first attempted by an unattended overnight run, which
+  stopped at Stage 0: two of the four pinned capability repos
+  (`cover-letter-writer`, `targeted-editor`) are private and the cloud
+  session had no GitHub grant for them, so `uv sync` failed and neither
+  `pytest` nor `lint-imports` could run. Resolved by installing the
+  Claude GitHub App for the `onlinemoose` account.
+
 ## 2026-08-31 — Live word count on the slow pages (cv-writer v0.5.0, cover-letter-writer v0.13.0)
 
 Both capabilities gained an optional keyword-only `on_progress` callback

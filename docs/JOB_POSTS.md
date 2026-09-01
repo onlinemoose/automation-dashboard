@@ -135,8 +135,11 @@ create table job_posts (
   title      text not null,
   posting    text not null,
   emphasis   text not null default '',
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  user_id    uuid not null references auth.users(id) on delete cascade
 );
+
+create index if not exists job_posts_user_id_idx on job_posts (user_id);
 
 grant all privileges on table job_posts to service_role;
 alter table job_posts enable row level security;
@@ -155,5 +158,14 @@ for local dev and tests; set the vars for anything real.
 - **No async.** Analysis and the store calls are synchronous and wrapped in
   `run_in_threadpool`, like the writer `run()` and the Background documents
   store.
-- **No per-job scoping of the picker.** Every saved job post is offered on
+- **Per-user scoped.** Every query filters on `user_id`, reads and writes
+  alike, and each public function takes the owning user's id as its last
+  required argument (`list_job_posts(user_id)`,
+  `get_job_post(job_id, user_id)`, `create_job_post(title, posting, user_id)`,
+  `update_job_post(job_id, user_id, *, title=…, posting=…, emphasis=…)`,
+  `delete_job_post(job_id, user_id)`). Another user's post is invisible:
+  absent from the list and the picker, `None` from `get`, a no-op to update
+  or delete, and a 404 over HTTP. See `USER_SCOPING.md` and
+  `migrations/2026-09-01_user_scoping.sql`.
+- **No per-job scoping of the picker.** Every job post you own is offered on
   both writer pages.

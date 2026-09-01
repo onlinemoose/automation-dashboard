@@ -12,8 +12,13 @@ to an in-process dict (with a `warnings.warn`) when `SUPABASE_URL` /
 `SUPABASE_SERVICE_KEY` are unset, so local dev and the test suite run
 without Supabase (nothing persists across restarts).
 
-One draft per `(slug, section, source_hash)` — re-opening the same result
-returns the same working draft. `original` is the result exactly as
+Rows are scoped per user: every method takes the owning `user_id` and
+every query filters on it, reads and writes alike. See
+`docs/USER_SCOPING.md`.
+
+One draft per `(user_id, slug, section, source_hash)` — re-opening the
+same result returns the same working draft, and two users opening the
+same text get two independent drafts. `original` is the result exactly as
 `run()` first produced it and is never mutated; `current` is `original`
 with every accepted revision spliced in, in order. **Undo is replay:**
 drop the last revision and recompute `current` from `original` + what
@@ -117,6 +122,7 @@ class Draft:
     revisions: list[Revision] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    user_id: str = ""  # the Supabase auth.users id that owns this row
 
 
 def replay(original: str, revisions: list[Revision]) -> str:
@@ -137,25 +143,38 @@ def _parse_ts(value: object) -> datetime | None:
 
 
 class _Backend(Protocol):
-    def create_or_get(self, slug: str, section: str, text: str) -> Draft: ...
-    def get(self, draft_id: str) -> Draft | None: ...
-    def add_revision(self, draft_id: str, rev: Revision) -> Draft | None: ...
-    def undo(self, draft_id: str) -> Draft | None: ...
+    def create_or_get(
+        self, slug: str, section: str, text: str, user_id: str
+    ) -> Draft: ...
+    def get(self, draft_id: str, user_id: str) -> Draft | None: ...
+    def add_revision(
+        self, draft_id: str, rev: Revision, user_id: str
+    ) -> Draft | None: ...
+    def undo(self, draft_id: str, user_id: str) -> Draft | None: ...
 
 
 class _MemoryBackend:
-    """Non-persistent fallback. Only used when Supabase isn't configured."""
+    """Non-persistent fallback. Only used when Supabase isn't configured.
+
+    Mirrors the Supabase backend's `user_id` filtering exactly: a draft
+    belonging to another user is invisible, not merely unlisted.
+    """
 
     def __init__(self) -> None:
         self._drafts: dict[str, Draft] = {}
         self._seq = 0
         self._lock = threading.Lock()
 
-    def create_or_get(self, slug: str, section: str, text: str) -> Draft:
+    def create_or_get(self, slug: str, section: str, text: str, user_id: str) -> Draft:
         digest = source_hash(text)
         with self._lock:
             for draft in self._drafts.values():
-                if (draft.slug, draft.section, draft.source_hash) == (slug, section, digest):
+                # The owner is part of the dedupe key — otherwise user B
+                # opening the same result would land on user A's draft,
+                # revisions and all.
+                if (draft.user_id, draft.slug, draft.section, draft.source_hash) == (
+                    user_id, slug, section, digest,
+                ):
                     return draft
             self._seq += 1
             now = datetime.now(timezone.utc)
@@ -169,27 +188,29 @@ class _MemoryBackend:
                 revisions=[],
                 created_at=now,
                 updated_at=now,
+                user_id=user_id,
             )
             self._drafts[draft.id] = draft
             return draft
 
-    def get(self, draft_id: str) -> Draft | None:
-        return self._drafts.get(draft_id)
+    def get(self, draft_id: str, user_id: str) -> Draft | None:
+        draft = self._drafts.get(draft_id)
+        return draft if draft is not None and draft.user_id == user_id else None
 
-    def add_revision(self, draft_id: str, rev: Revision) -> Draft | None:
+    def add_revision(self, draft_id: str, rev: Revision, user_id: str) -> Draft | None:
         with self._lock:
             draft = self._drafts.get(draft_id)
-            if draft is None:
+            if draft is None or draft.user_id != user_id:
                 return None
             revisions = [*draft.revisions, rev]
             updated = _with_revisions(draft, revisions)
             self._drafts[draft_id] = updated
             return updated
 
-    def undo(self, draft_id: str) -> Draft | None:
+    def undo(self, draft_id: str, user_id: str) -> Draft | None:
         with self._lock:
             draft = self._drafts.get(draft_id)
-            if draft is None:
+            if draft is None or draft.user_id != user_id:
                 return None
             if not draft.revisions:
                 return draft
@@ -228,13 +249,17 @@ class _SupabaseBackend:
             revisions=revisions,
             created_at=_parse_ts(row.get("created_at")),
             updated_at=_parse_ts(row.get("updated_at")),
+            user_id=row.get("user_id") or "",
         )
 
-    def create_or_get(self, slug: str, section: str, text: str) -> Draft:
+    def create_or_get(self, slug: str, section: str, text: str, user_id: str) -> Draft:
         digest = source_hash(text)
         res = (
             self._table()
             .select("*")
+            # The owner is part of the lookup as well as the insert — miss
+            # it here and user B re-uses user A's draft row.
+            .eq("user_id", user_id)
             .eq("slug", slug)
             .eq("section", section)
             .eq("source_hash", digest)
@@ -254,18 +279,28 @@ class _SupabaseBackend:
                     "original": text,
                     "current": text,
                     "revisions": [],
+                    "user_id": user_id,
                 }
             )
             .execute()
         )
         return self._row((res.data or [{}])[0])
 
-    def get(self, draft_id: str) -> Draft | None:
-        res = self._table().select("*").eq("id", draft_id).limit(1).execute()
+    def get(self, draft_id: str, user_id: str) -> Draft | None:
+        res = (
+            self._table()
+            .select("*")
+            .eq("id", draft_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
         rows = res.data or []
         return self._row(rows[0]) if rows else None
 
-    def _save(self, draft_id: str, revisions: list[Revision], current: str) -> Draft | None:
+    def _save(
+        self, draft_id: str, revisions: list[Revision], current: str, user_id: str
+    ) -> Draft | None:
         res = (
             self._table()
             .update(
@@ -276,26 +311,29 @@ class _SupabaseBackend:
                 }
             )
             .eq("id", draft_id)
+            # Defence in depth on the read-modify-write: the read above is
+            # already scoped, this stops a racing owner change slipping past.
+            .eq("user_id", user_id)
             .execute()
         )
         rows = res.data or []
         return self._row(rows[0]) if rows else None
 
-    def add_revision(self, draft_id: str, rev: Revision) -> Draft | None:
-        draft = self.get(draft_id)
+    def add_revision(self, draft_id: str, rev: Revision, user_id: str) -> Draft | None:
+        draft = self.get(draft_id, user_id)
         if draft is None:
             return None
         revisions = [*draft.revisions, rev]
-        return self._save(draft_id, revisions, replay(draft.original, revisions))
+        return self._save(draft_id, revisions, replay(draft.original, revisions), user_id)
 
-    def undo(self, draft_id: str) -> Draft | None:
-        draft = self.get(draft_id)
+    def undo(self, draft_id: str, user_id: str) -> Draft | None:
+        draft = self.get(draft_id, user_id)
         if draft is None:
             return None
         if not draft.revisions:
             return draft
         revisions = list(draft.revisions[:-1])
-        return self._save(draft_id, revisions, replay(draft.original, revisions))
+        return self._save(draft_id, revisions, replay(draft.original, revisions), user_id)
 
 
 def _with_revisions(draft: Draft, revisions: list[Revision]) -> Draft:
@@ -343,18 +381,23 @@ def reset() -> None:
 
 
 # --- public API: thin pass-throughs to the chosen backend ----------------
+#
+# Every one of these takes the owning user's id as its last required
+# argument, with no default — a missed call site is a loud TypeError at
+# import/collection time rather than a silent cross-user read.
 
 
-def create_or_get_draft(slug: str, section: str, text: str) -> Draft:
-    return _store().create_or_get(slug, section, normalize(text))
+def create_or_get_draft(slug: str, section: str, text: str, user_id: str) -> Draft:
+    return _store().create_or_get(slug, section, normalize(text), user_id)
 
 
-def get_draft(draft_id: str) -> Draft | None:
-    return _store().get(draft_id)
+def get_draft(draft_id: str, user_id: str) -> Draft | None:
+    return _store().get(draft_id, user_id)
 
 
 def record_revision(
     draft_id: str,
+    user_id: str,
     *,
     instruction: str,
     selection: str,
@@ -365,7 +408,8 @@ def record_revision(
     cost: dict | None = None,
 ) -> Draft | None:
     """Append an accepted revision and re-splice `current`. Returns the
-    updated draft, or None if `draft_id` is unknown."""
+    updated draft, or None if `draft_id` is unknown or owned by someone
+    else."""
     rev = Revision(
         at=datetime.now(timezone.utc),
         instruction=instruction,
@@ -376,10 +420,11 @@ def record_revision(
         note=note,
         cost=dict(cost or {}),
     )
-    return _store().add_revision(draft_id, rev)
+    return _store().add_revision(draft_id, rev, user_id)
 
 
-def undo_last(draft_id: str) -> Draft | None:
+def undo_last(draft_id: str, user_id: str) -> Draft | None:
     """Drop the last revision and replay. No-op if there are none.
-    Returns the updated draft, or None if `draft_id` is unknown."""
-    return _store().undo(draft_id)
+    Returns the updated draft, or None if `draft_id` is unknown or owned
+    by someone else."""
+    return _store().undo(draft_id, user_id)

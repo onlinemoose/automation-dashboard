@@ -3,7 +3,12 @@
 A `Page` mirrors one capability's contract and nothing else:
 
 - `fields`        -> the capability's `Input` (one form field per argument)
-- `build_input`   -> turns the submitted form into that `Input`
+- `build_input`   -> turns the submitted form into that `Input`. Takes the
+                     current user's id as a second argument, so it can
+                     resolve keys into the app's own per-user stores
+                     (`job_post_id`, `background_document_ids`). That id is
+                     app plumbing, never a capability `Input` field — the
+                     same documented category as those two form keys.
 - `run`           -> the capability's `run()` (the only call into it)
 - `sections`      -> turns its `Output` into headed blocks of Markdown
 - `example_form`  -> a valid demo submission (also powers "Load example")
@@ -85,7 +90,7 @@ class Page:
     fields: Sequence[Field]
     example_form: Mapping[str, str]
     example_output: object
-    build_input: Callable[[Mapping[str, str]], object]
+    build_input: Callable[[Mapping[str, str], str], object]
     run: Callable[[object], object]
     sections: Callable[[object], list[Section]]
     # Optional: map the capability's `Output` to a `RunMeta` for the cost
