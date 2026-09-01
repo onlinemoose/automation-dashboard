@@ -508,6 +508,22 @@ def test_picker_appears_on_the_writer_page(client: TestClient) -> None:
     assert "Acme — Product Lead" in body
 
 
+def test_writer_pages_drop_the_job_posting_textarea(client: TestClient) -> None:
+    for slug in ("cover-letter-writer", "cv-writer"):
+        body = client.get(f"/p/{slug}").text
+        assert 'name="job_post_id"' in body  # the picker stays
+        assert 'name="job_posting"' not in body  # the free-text box is gone
+
+
+def test_writer_run_requires_a_picked_job_post(client: TestClient) -> None:
+    resp = client.post(
+        "/p/cover-letter-writer",
+        data={"cv": "my cv text", "job_post_id": "", "emphasis": ""},
+    )
+    assert resp.status_code == 422
+    assert "Load a saved job post." in resp.text
+
+
 def test_picked_job_post_reaches_the_capability_input(monkeypatch) -> None:
     job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     _jobs.update_job_post(

@@ -3,6 +3,21 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-01 — Writer pages drop the free-text Job posting box
+
+Branch `new-user-flow`. Both **Cover Letter Writer** and **CV Writer**
+lose the `job_posting` textarea field. The "Load a saved job post" picker
+is now the only way to supply the posting.
+
+- `build_input`: when no job post resolves it raises
+  `FormError({"job_post_id": "Load a saved job post."})` instead of
+  reading a `job_posting` field. A raw `job_posting` value is still
+  honoured when present, so "Load example" and direct API posts keep
+  working (`EXAMPLE_FORM` still carries the example posting).
+- Picker help text reworded; `FormError` now imported in both pages.
+- Tests: neither writer form renders `name="job_posting"`; a run with no
+  job post picked is a 422 on the picker.
+
 ## 2026-09-01 — Job posts list: icon actions + writer shortcuts
 
 Branch `new-user-flow`.

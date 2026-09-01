@@ -14,7 +14,7 @@ from cv_writer import Cost, Emphasis, Input, Output, run
 
 from dashboard import _documents, _jobs
 from dashboard._job_analysis import parse_annotated_emphasis
-from dashboard.pages._spec import Field, FormReader, Page, RunMeta, Section
+from dashboard.pages._spec import Field, FormError, FormReader, Page, RunMeta, Section
 
 # The pinned tag, kept in step with `[tool.uv.sources]` in pyproject.toml.
 # Stamped onto every RunMeta so usage records say which build produced them.
@@ -33,15 +33,8 @@ FIELDS = (
         "job_post_id",
         "Load a saved job post",
         widget="picker",
-        help="Optional. Pick one to fill the job posting and emphasis from your "
-        "analysed, annotated list under Job posts. Overrides the two boxes below.",
-    ),
-    Field(
-        "job_posting",
-        "Job posting",
-        widget="textarea",
-        help="The full posting text — title, company, responsibilities, requirements. "
-        "Required unless you load a saved job post above.",
+        help="Pick the analysed, annotated posting to write against, from your "
+        "list under Job posts. It fills the job posting and the emphasis list below.",
     ),
     Field(
         "cv",
@@ -108,6 +101,9 @@ FIELDS = (
 )
 
 EXAMPLE_FORM = {
+    # No job_posting field is rendered any more (the saved-job-post picker
+    # is the way in), but "Load example" still needs a posting to run
+    # against — build_input reads this raw value when nothing is picked.
     "job_posting": (_EXAMPLES / "job_posting.md").read_text(),
     "cv": (_EXAMPLES / "cv.md").read_text(),
     "emphasis": (_EXAMPLES / "emphasis.md").read_text(),
@@ -158,8 +154,13 @@ def build_input(form, user_id: str) -> Input:
         job_posting = job_post.posting
         emphasis_source = job_post.emphasis
     else:
-        job_posting = r.text("job_posting", "Job posting", required=True)
+        # The job_posting field was removed — the picker is the way in. A
+        # raw job_posting may still arrive from "Load example" or a direct
+        # API post; otherwise a saved job post must be picked.
+        job_posting = (form.get("job_posting") or "").strip()
         emphasis_source = form.get("emphasis") or ""
+        if not job_posting:
+            raise FormError({"job_post_id": "Load a saved job post."})
     cv = r.text("cv", "Current CV", required=True)
     job_title = r.text("job_title", "Role title")
     job_company = r.text("job_company", "Company")
