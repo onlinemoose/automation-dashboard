@@ -18,7 +18,11 @@
     {% if f.name in errors %}<p class="error">{{ errors[f.name] }}</p>{% endif %}
     {% else %}
     <div class="field{% if f.name in errors %} field--error{% endif %}">
-      <label for="{{ f.name }}">
+      {# A checklist has many inputs, none with id="{{ f.name }}" — a `for`
+         there points at nothing (browser autofill / a11y warning). Render
+         the group caption without `for`; each option carries its own
+         <label> around its checkbox. #}
+      <label{% if f.widget != "checklist" %} for="{{ f.name }}"{% endif %}>
         {{ f.label }}{% if f.required %} <span class="req" title="required">*</span>{% endif %}
       </label>
       {% if f.help %}<p class="help">{{ f.help }}</p>{% endif %}

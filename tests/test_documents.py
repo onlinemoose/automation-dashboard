@@ -267,6 +267,16 @@ def test_free_text_note_field_is_named_for_what_it_is(client: TestClient) -> Non
         assert 'name="background_documents"' not in body
 
 
+def test_checklist_group_label_has_no_dangling_for(client: TestClient) -> None:
+    # A checklist renders many checkboxes, none with id="background_document_ids",
+    # so the group caption must not carry a `for` that points at nothing.
+    body = client.get("/p/cover-letter-writer?example=1").text
+    assert 'for="background_document_ids"' not in body
+    # The widgets that *do* have a single matching control keep their `for`.
+    assert 'for="additional_context"' in body and 'id="additional_context"' in body
+    assert 'for="cv_document_id"' in body and 'id="cv_document_id"' in body
+
+
 def test_ticked_documents_reach_the_capability_input(monkeypatch) -> None:
     doc = _documents.create_document("Bio", "Ten years shipping data tools.", USER)
 

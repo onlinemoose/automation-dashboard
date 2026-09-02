@@ -3,6 +3,16 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-02 — page.html: drop the dangling `for` on a checklist's group label
+
+`page.html` emitted `<label for="{{ f.name }}">` for every field,
+including the `checklist` — which renders many checkboxes and no element
+with `id="{{ f.name }}"`, so the `for` pointed at nothing (a browser
+autofill / accessibility warning). The group caption now omits `for` for
+`checklist`; each option keeps its own `<label>` wrapping its checkbox.
+Widgets with a single matching control (`text`, `number`, `textarea`,
+`doc_picker`) are unchanged.
+
 ## 2026-09-02 — Writer forms: rename the free-text box to `additional_context`
 
 The free-text box on the Cover Letter / CV pages was
