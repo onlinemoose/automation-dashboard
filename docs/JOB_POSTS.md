@@ -23,10 +23,11 @@ picked id into `job_posting` text and an `emphasis` list.
    one card per requirement — an importance pill (`must-have` / `strong` /
    `nice-to-have`), the requirement sentence, the quoted span from the
    posting (all read-only), and a **note** box. **Annotate** each card —
-   where you're strong, or where it's a gap — then **Save** (persists the
-   emphasis *and* the summary together). **Re-analyse posting** replaces
-   both (it asks first). A hand-typed / unparseable emphasis falls back to
-   a plain textarea.
+   where you're strong, or where it's a gap — then **Save** (persists your
+   notes on the emphasis list; the summary was already saved by Analyse).
+   **Re-analyse posting** replaces both the summary and the list (it asks
+   first). A hand-typed / unparseable emphasis falls back to a plain
+   textarea.
 4. Open **Cover Letter Writer** / **CV Writer** from an analysed row's
    shortcut icon (`/p/<writer>?job_post_id=<id>`) — that is the only way
    in. The job post drives the form: it supplies `job_posting` and the
@@ -94,11 +95,11 @@ the canonical emphasis text with `_job_analysis.emphasis_items_to_text()`
 writer-page parse are byte-for-byte what a plain-textarea save produced.
 No JavaScript.
 
-The summary lives only in the browser between Analyse and Save — Analyse
-writes the emphasis list to the store but not the summary; the working
-view carries the summary in a hidden field so **Save** writes both. Leave
-the page after Analyse without saving and the summary is gone (the
-emphasis list is not).
+Analyse writes everything it produces to the store — emphasis, summary,
+`company` / `job_title` — so leaving the page without a Save loses
+nothing. The working view still carries the summary in a hidden field and
+**Save** re-writes it alongside the notes, which is a harmless no-op for
+the (read-only) summary.
 
 ## Where it lives
 
@@ -295,15 +296,15 @@ for local dev and tests; set the vars for anything real.
 - **Analyse overwrites the emphasis box.** It's step 2 of the workflow —
   analyse, then annotate, then Save. Re-analysing (only offered once the
   list has content) asks for confirmation first.
-- **The summary is persisted by Save, not by Analyse.** Analyse writes the
-  emphasis list to the store immediately but keeps the summary in a hidden
-  form field; **Save** writes emphasis and summary together. A `summary`
-  column on `job_posts` holds it (see the migration under *Backing
-  store*). It is read-only in the UI.
-- **`company` / `job_title` are persisted by Analyse** (unlike the
-  summary), refreshed on every analyse, `""` when the posting omits them.
-  They have no field on the Job Post screens — correction happens in the
-  writer form they pre-fill. See *Prefilling the writer forms*.
+- **Analyse persists the summary, emphasis, `company` and `job_title`
+  together.** All four are written to the store the moment analysis
+  returns, refreshed on every analyse, `""` when the posting omits them.
+  **Save** then persists your notes on the emphasis list (and re-writes
+  the summary as a no-op). A `summary` column on `job_posts` holds it (see
+  the migration under *Backing store*); it is read-only in the UI.
+  `company` / `job_title` have no field on the Job Post screens —
+  correction happens in the writer form they pre-fill. See *Prefilling the
+  writer forms*.
 - **The posting is only editable before the first analysis.** After that
   the detail screen shows it read-only; changing it means deleting the
   post and re-adding it.

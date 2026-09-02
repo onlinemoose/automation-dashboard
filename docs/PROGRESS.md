@@ -3,6 +3,19 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-02 — Analyse persists the job-post summary immediately
+
+The `/jobs/{id}/analyse` handler already wrote `emphasis`, `company` and
+`job_title` to the store the moment analysis returned, but held the
+`summary` only in the rendered page + a hidden field, so it reached
+Supabase only on **Save**. Analysing then leaving without saving lost the
+summary while keeping the emphasis list — and the `summary` column stayed
+`''`. Fixed by passing `summary=analysis.summary` in that handler's
+`update_job_post(...)` call, so all four analysis outputs persist
+together. Save still re-writes the summary (a harmless no-op for the
+read-only field). Test `test_analyse_persists_the_summary_and_shows_it`
+and `docs/JOB_POSTS.md` updated.
+
 ## 2026-09-02 — Upgrade cv-writer to v0.6.2 (output ceiling 8k → 16k)
 
 Long / full regional CVs (a German Lebenslauf, a multi-page academic CV)
