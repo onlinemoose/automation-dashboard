@@ -428,3 +428,34 @@ def undo_last(draft_id: str, user_id: str) -> Draft | None:
     Returns the updated draft, or None if `draft_id` is unknown or owned
     by someone else."""
     return _store().undo(draft_id, user_id)
+
+
+MANUAL_EDIT = "(manual edit)"  # the `instruction` recorded for a hand edit
+
+
+def record_manual_edit(draft_id: str, user_id: str, *, text: str) -> Draft | None:
+    """Record a free-form edit of the whole draft as one revision — the
+    user replacing the current text in full, in place of a capability
+    span rewrite. It slots into undo-by-replay like any other revision, so
+    `original` stays immutable and `Undo last` reverts it.
+
+    Returns the updated draft; the draft unchanged when `text` matches
+    `current`; None if `draft_id` is unknown or owned by someone else.
+    """
+    draft = _store().get(draft_id, user_id)
+    if draft is None:
+        return None
+    text = normalize(text)
+    if text == draft.current:
+        return draft
+    rev = Revision(
+        at=datetime.now(timezone.utc),
+        instruction=MANUAL_EDIT,
+        selection=draft.current,
+        span_start=0,
+        span_len=len(draft.current),
+        revised=text,
+        note="",
+        cost={},
+    )
+    return _store().add_revision(draft_id, rev, user_id)

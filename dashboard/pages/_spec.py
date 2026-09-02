@@ -63,6 +63,11 @@ class Field:
 class Section:
     heading: str
     markdown: str
+    # Whether this section can be opened as a working draft (the "Edit
+    # draft" button on the result view). True for the primary output a
+    # page produces; set False for a secondary, explanatory section — a
+    # targeting note, a summary — that is only ever read or downloaded.
+    editable: bool = True
 
 
 @dataclass(frozen=True)
@@ -110,6 +115,13 @@ class Page:
     # Only meaningful with `slow=True`: the streamed holding view then
     # shows a live word count instead of a bare spinner.
     progress: bool = False
+    # For a job-post-driven page: the `job_posts` column a finished run is
+    # saved to (one of `dashboard._jobs.RESULT_SLOTS`). When set, a
+    # completed run is stored against the job post it was written for, and
+    # re-opening the page for that post (`?job_post_id=…`) shows the saved
+    # result in place of a blank form — `?rerun=1` forces the form. Pages
+    # not driven by a job post leave this None. See docs/JOB_POSTS.md.
+    saved_result_slot: str | None = None
 
 
 class FormReader:

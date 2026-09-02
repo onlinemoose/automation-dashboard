@@ -1,9 +1,17 @@
-/* Targeted revision of a working draft.
+/* Targeted revision, and direct editing, of a working draft.
  *
  * The draft is raw Markdown in a <pre>, so a text selection inside it maps
  * 1:1 to character offsets in the stored `current` text — no DOM-range to
- * source mapping. One edit is in flight at a time: pick a span, give an
- * instruction, see a diff, then accept / retry / reject before the next.
+ * source mapping. One span edit is in flight at a time: pick a span, give
+ * an instruction, see a diff, then accept / retry / reject before the next.
+ *
+ * The <pre> is also `contenteditable`: typing changes it directly, no
+ * separate edit mode. Enter and paste are intercepted so the doc stays
+ * plain text (a browser's native contenteditable handling of Enter reaches
+ * for a <div>/<br>, which would silently eat the newline from
+ * `textContent` and desync the offsets the span-selection code relies on).
+ * A change autosaves on blur, and is flushed first if the user hits
+ * Download or Undo before that fires, so both act on what's on screen.
  */
 (function () {
   "use strict";
@@ -35,9 +43,13 @@
   var busyEl = document.getElementById("draft-busy");
   var undoBtn = document.getElementById("draft-undo");
   var historyWrap = document.getElementById("draft-history-wrap");
+  var downloadLink = document.querySelector('.draft__toolbar a[href$="/download"]');
+  var docErrorEl = document.getElementById("draft-doc-error");
 
   var pending = null; // {start, len, selection} while a span is being worked
   var lastProposal = null; // {revised, note, cost}
+  var revisionCount = parseInt(root.dataset.revisionCount || "0", 10) || 0;
+  var docDirty = false; // the <pre> has been typed in since the last save
 
   // --- selecting a span ---------------------------------------------------
 
@@ -99,7 +111,7 @@
   }
 
   function onSelectionSettled(evt) {
-    if (pending || !work.hidden) return; // one edit at a time
+    if (pending || !work.hidden) return; // one span edit at a time
     var off = selectionOffsets();
     if (!off || off.end <= off.start || !doc.textContent.slice(off.start, off.end).trim()) {
       hide(reviseBtn);
@@ -139,8 +151,11 @@
   }
 
   function highlightPending() {
-    // A light visual cue: outline the doc while an edit is open.
+    // Outline the doc and stop direct typing while a span proposal is
+    // open — its offsets are only valid against the text as it was when
+    // the span was picked.
     doc.classList.add("draft__doc--locked");
+    doc.contentEditable = "false";
   }
 
   function closeWork() {
@@ -150,6 +165,7 @@
     hide(work);
     hide(reviseBtn);
     doc.classList.remove("draft__doc--locked");
+    doc.contentEditable = "true";
     window.getSelection().removeAllRanges();
   }
 
@@ -286,6 +302,7 @@
         };
         doc.textContent = res.data.current;
         undoBtn.disabled = !res.data.can_undo;
+        revisionCount = res.data.revision_count;
         addHistory(accepted);
         closeWork();
       })
@@ -301,7 +318,13 @@
     undoBtn.addEventListener("click", function () {
       if (undoBtn.disabled) return;
       undoBtn.disabled = true;
-      fetch("/drafts/" + draftId + "/undo", { method: "POST" })
+      // A not-yet-saved manual edit is the most recent change from the
+      // user's point of view — save it first so Undo reverts *that*,
+      // same as undoing a just-accepted span revision.
+      saveDoc()
+        .then(function () {
+          return fetch("/drafts/" + draftId + "/undo", { method: "POST" });
+        })
         .then(function (r) {
           if (!r.ok) throw new Error();
           return r.json();
@@ -312,6 +335,112 @@
         .catch(function () {
           undoBtn.disabled = false;
         });
+    });
+  }
+
+  // --- direct editing -------------------------------------------------
+  // The <pre> is contenteditable (see the file banner for why Enter and
+  // paste are intercepted). A change is saved as one revision on blur, or
+  // first if the user acts on it via Download or Undo before that fires.
+
+  function clearDocError() {
+    docErrorEl.textContent = "";
+    hide(docErrorEl);
+  }
+
+  function showDocError(msg) {
+    docErrorEl.textContent = msg;
+    show(docErrorEl);
+  }
+
+  // Replace the current selection (or just the caret) with plain text,
+  // via a Range rather than execCommand — keeps the <pre> as text nodes
+  // only, which is what the span-selection offset math assumes.
+  function insertPlainText(text) {
+    var sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    var range = sel.getRangeAt(0);
+    range.deleteContents();
+    var node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    docDirty = true;
+  }
+
+  doc.addEventListener("input", function () {
+    docDirty = true;
+  });
+
+  doc.addEventListener("keydown", function (e) {
+    if (doc.contentEditable !== "true") return;
+    if (e.key === "Enter") {
+      // Left to the browser, Enter in a contenteditable inserts a <div> or
+      // <br> — an element, not a "\n" character — which textContent drops
+      // or splits without a separator. Insert the character ourselves.
+      e.preventDefault();
+      insertPlainText("\n");
+    }
+  });
+
+  doc.addEventListener("paste", function (e) {
+    if (doc.contentEditable !== "true") return;
+    e.preventDefault();
+    var clip = e.clipboardData || window.clipboardData;
+    insertPlainText(clip ? clip.getData("text/plain") : "");
+  });
+
+  // Saves only if something changed; resolves either way so callers can
+  // always chain onto it. Leaves `docDirty` set on failure, so the next
+  // blur / Download / Undo retries.
+  function saveDoc() {
+    if (!docDirty) return Promise.resolve();
+    var text = doc.textContent;
+    if (!text.trim()) {
+      showDocError("The draft can't be empty.");
+      return Promise.resolve();
+    }
+    clearDocError();
+    return fetch("/drafts/" + draftId + "/edit", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: form({ text: text }),
+    })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          return { ok: r.ok, data: data };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok) {
+          showDocError(res.data.error || "Could not save the edit.");
+          return;
+        }
+        docDirty = false;
+        undoBtn.disabled = !res.data.can_undo;
+        if (res.data.revision_count > revisionCount) {
+          addHistory({ instruction: "(manual edit)", note: "" });
+        }
+        revisionCount = res.data.revision_count;
+      })
+      .catch(function () {
+        showDocError("Could not reach the server. Try again.");
+      });
+  }
+
+  doc.addEventListener("blur", function () {
+    saveDoc();
+  });
+
+  if (downloadLink) {
+    downloadLink.addEventListener("click", function (e) {
+      if (!docDirty) return; // nothing unsaved — let the link navigate as normal
+      e.preventDefault();
+      saveDoc().then(function () {
+        window.location.href = downloadLink.href;
+      });
     });
   }
 

@@ -199,7 +199,9 @@ def build_input(form, user_id: str) -> Input:
 def sections(output: Output) -> list[Section]:
     return [
         Section("Tailored CV", output.tailored_cv),
-        Section("What it targeted", output.tailoring_note),
+        # A read-only note on what the CV aimed at — not something you
+        # revise span by span, so no "Edit draft".
+        Section("What it targeted", output.tailoring_note, editable=False),
     ]
 
 
@@ -233,4 +235,8 @@ PAGE = Page(
     # cv-writer's run() takes an on_progress callback (v0.5.0+) — the
     # holding view shows a live word count.
     progress=True,
+    # A finished CV is saved against the job post it was written for (the
+    # `tailored_cv` column on `job_posts`); re-opening this page for that
+    # post shows it instead of a blank form.
+    saved_result_slot="tailored_cv",
 )

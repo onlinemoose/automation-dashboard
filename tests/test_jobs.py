@@ -106,6 +106,31 @@ def test_store_crud_roundtrip() -> None:
     assert b  # keep ref
 
 
+def test_store_roundtrips_the_writer_result_slots() -> None:
+    """A finished Cover Letter / CV run is stashed on the job post in its
+    own jsonb slot, independent of each other and of an unrelated update."""
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    assert job.cover_letter is None and job.tailored_cv is None
+
+    letter = {
+        "sections": [{"heading": "Cover letter", "markdown": "Dear team…"}],
+        "meta": None,
+        "saved_at": "2026-09-02T00:00:00+00:00",
+    }
+    _jobs.update_job_post(job.id, USER, cover_letter=letter)
+    again = _jobs.get_job_post(job.id, USER)
+    assert again.cover_letter == letter
+    assert again.tailored_cv is None  # the other slot is untouched
+
+    # an unrelated update leaves the stored result in place
+    _jobs.update_job_post(job.id, USER, emphasis="Own the roadmap\n- strong")
+    assert _jobs.get_job_post(job.id, USER).cover_letter == letter
+
+    # the slot is scoped like the rest of the row
+    assert _jobs.update_job_post(job.id, "someone-else", tailored_cv=letter) is None
+    assert _jobs.get_job_post(job.id, USER).tailored_cv is None
+
+
 def test_job_posts_are_scoped_to_the_user() -> None:
     """A row created by one user is invisible to another — not merely
     unlisted, but unreadable, unwritable and undeletable."""
@@ -557,3 +582,133 @@ def test_picked_job_post_reaches_the_capability_input(monkeypatch) -> None:
     assert len(data.emphasis) == 1
     assert data.emphasis[0].quote == "Own the roadmap"
     assert "Candidate note: strong, did this at Bract" in data.emphasis[0].point
+
+
+# --- a saved result re-shows for its job post ---------------------------
+
+
+def _analysed_job() -> _jobs.JobPost:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    _jobs.update_job_post(
+        job.id, USER, emphasis="Own the roadmap\n> Own the roadmap\n- strong"
+    )
+    return job
+
+
+def _saved_letter() -> dict:
+    # Shaped like `app._result_payload` writes it: the targeting note is
+    # not editable.
+    return {
+        "sections": [
+            {
+                "heading": "Cover letter",
+                "markdown": "Dear hiring team, the saved letter body.",
+                "editable": True,
+            },
+            {
+                "heading": "What it targeted",
+                "markdown": "- roadmap ownership",
+                "editable": False,
+            },
+        ],
+        "meta": None,
+        "saved_at": "2026-09-02T00:00:00+00:00",
+    }
+
+
+def test_writer_page_shows_the_saved_result_for_a_job(client: TestClient) -> None:
+    job = _analysed_job()
+    _jobs.update_job_post(job.id, USER, cover_letter=_saved_letter())
+
+    body = client.get(f"/p/cover-letter-writer?job_post_id={job.id}").text
+    assert "the saved letter body" in body
+    assert "What it targeted" in body
+    # it's the result view, not the form: no form posting back to the page,
+    # no field widgets
+    assert 'action="/p/cover-letter-writer"' not in body
+    assert "<textarea" not in body
+    assert 'name="cv_document_id"' not in body
+    # "Run again" is the only way back to the form — no header crumb link
+    assert 'class="crumb"' not in body
+    # the primary section is editable; the targeting note is read/download only
+    assert body.count(">Edit draft</button>") == 1
+    assert body.count(">Download .md</a>") == 2
+    # "Run again" goes back to the form with this job still selected
+    assert f"/p/cover-letter-writer?job_post_id={job.id}&amp;rerun=1" in body
+
+
+def test_rerun_query_forces_the_form_past_a_saved_result(client: TestClient) -> None:
+    job = _analysed_job()
+    _jobs.update_job_post(job.id, USER, cover_letter=_saved_letter())
+
+    body = client.get(f"/p/cover-letter-writer?job_post_id={job.id}&rerun=1").text
+    assert 'action="/p/cover-letter-writer"' in body  # the form is shown
+    assert "the saved letter body" not in body
+    assert f'value="{job.id}" selected' in body  # ...with the job kept in the picker
+
+
+def test_writer_page_shows_the_form_when_the_job_has_no_saved_result(
+    client: TestClient,
+) -> None:
+    job = _analysed_job()  # analysed, but this writer has never run for it
+    body = client.get(f"/p/cv-writer?job_post_id={job.id}").text
+    assert 'action="/p/cv-writer"' in body
+    assert f'value="{job.id}" selected' in body
+
+
+def test_the_saved_result_is_per_job_and_per_writer(client: TestClient) -> None:
+    job = _analysed_job()
+    _jobs.update_job_post(job.id, USER, cover_letter=_saved_letter())
+
+    # the CV writer has its own slot — still the form for this job
+    assert 'action="/p/cv-writer"' in client.get(
+        f"/p/cv-writer?job_post_id={job.id}"
+    ).text
+    # and with no job post at all it's always the form
+    assert 'action="/p/cover-letter-writer"' in client.get(
+        "/p/cover-letter-writer"
+    ).text
+
+
+def test_a_finished_run_is_saved_against_its_job_post(monkeypatch) -> None:
+    job = _analysed_job()
+
+    monkeypatch.setattr(
+        cover_letter_writer.PAGE,
+        "run",
+        lambda data, **_: cover_letter_writer.PAGE.example_output,
+    )
+    client = TestClient(create_app(auth_disabled=True))
+    resp = client.post(
+        "/p/cover-letter-writer",
+        data={**dict(cover_letter_writer.PAGE.example_form), "job_post_id": job.id},
+    )
+    assert resp.status_code == 200, resp.text
+
+    saved = _jobs.get_job_post(job.id, USER).cover_letter
+    assert saved is not None
+    expected = cover_letter_writer.PAGE.sections(cover_letter_writer.PAGE.example_output)
+    assert [s["heading"] for s in saved["sections"]] == [s.heading for s in expected]
+    assert [s["editable"] for s in saved["sections"]] == [s.editable for s in expected]
+    assert saved["meta"]["capability"] == "cover-letter-writer"
+    assert _jobs.get_job_post(job.id, USER).tailored_cv is None  # only its own slot
+
+    # re-opening the page for this job now shows that result, with the
+    # "Edit draft" button only on the editable section
+    body = client.get(f"/p/cover-letter-writer?job_post_id={job.id}").text
+    assert "What it targeted" in body
+    assert body.count(">Edit draft</button>") == 1
+
+
+def test_a_run_with_no_job_post_saves_nothing(monkeypatch) -> None:
+    monkeypatch.setattr(
+        cover_letter_writer.PAGE,
+        "run",
+        lambda data, **_: cover_letter_writer.PAGE.example_output,
+    )
+    client = TestClient(create_app(auth_disabled=True))
+    resp = client.post(
+        "/p/cover-letter-writer", data=dict(cover_letter_writer.PAGE.example_form)
+    )
+    assert resp.status_code == 200, resp.text
+    assert _jobs.list_job_posts(USER) == []  # nothing created or written

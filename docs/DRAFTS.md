@@ -1,21 +1,25 @@
 # Working drafts — targeted revision
 
 A capability result is usually close but not right. Instead of re-running
-the whole writer, open a result section as a **working draft** and revise
-it one span at a time: select a sentence, say what to change, and only
-that sentence is rewritten — the rest of the draft is left alone.
+the whole writer, open a result section as a **working draft** and change
+it in place: type directly into it, or revise one span at a time (select
+a sentence, say what to change, and only that sentence is rewritten).
+Then download it.
 
 This is **the app's own storage** (CLAUDE.md rule 6): private to the
 dashboard, no capability sees it. The `targeted-editor` capability is
 handed only `{document, selection, instruction, kind}` and returns a
 replacement for the span; the splice, the history, and undo are the
-app's.
+app's. A manual edit is recorded the same way — one revision, the whole
+span replaced — so it shows in History and `Undo last` reverts it.
 
 ## The workflow
 
 1. On a result page, click **Edit draft** under a section. That `POST`s
    the section's Markdown to `/drafts`, which creates (or re-finds) a
-   working draft and opens the editor at `/drafts/{id}`.
+   working draft and opens the editor at `/drafts/{id}`. Only sections a
+   page marks `editable` carry the button — the primary output (the
+   letter, the CV), not a read-only "What it targeted" note.
 2. **Select** any run of text in the draft. A floating **Revise…** button
    appears.
 3. Type an **instruction** ("make this concrete", "drop the second
@@ -24,11 +28,15 @@ app's.
    and the run cost. **Accept** splices it into the draft; **Reject**
    discards it; **Retry** re-asks with the same span (optionally an
    amended instruction).
-5. **Undo last** drops the most recent accepted revision. **Download .md**
-   saves the current draft.
+5. Or just **type into the draft** — it's editable text, not a read-only
+   view. The change autosaves (on blur, or first if you hit Download or
+   Undo before that fires) as one revision (instruction `(manual edit)`).
+6. **Undo last** drops the most recent revision — a span accept or a
+   manual edit alike. **Download .md** saves what's on screen.
 
-Only one edit is in flight at a time — while a proposal is open, new
-selections are ignored.
+Only one edit is in flight at a time — while a span proposal is open, the
+draft is briefly locked (not directly editable) and new selections are
+ignored, until it's accepted, rejected, or cancelled.
 
 ## Where it lives
 
@@ -38,12 +46,12 @@ selections are ignored.
 | The splice + undo-by-replay | `apply_revision()` / `replay()` in `dashboard/_drafts.py` |
 | Capability adapter | `dashboard/_targeted_edit.py` |
 | Screens | `/drafts*` routes in `dashboard/app.py`, `templates/draft.html`, `static/draft-edit.js` |
-| Entry point | the "Edit draft" button in `templates/result.html` |
+| Entry point | the "Edit draft" button in `templates/_result_panel.html`, per `Section` where `editable` is true |
 
 `/drafts`, `/drafts/{draft_id}`, `/drafts/{draft_id}/revise`,
 `/drafts/{draft_id}/accept`, `/drafts/{draft_id}/undo`,
-`/drafts/{draft_id}/download` are app-native routes — not capability
-pages. `tests/test_guardrails.py` lists them in `ALLOWED_ROUTES` for that
+`/drafts/{draft_id}/edit`, `/drafts/{draft_id}/download` are app-native
+routes — not capability pages. `tests/test_guardrails.py` lists them in `ALLOWED_ROUTES` for that
 reason, the same category as `/jobs` and `/documents`.
 
 ## The revision is a capability
@@ -160,8 +168,27 @@ draft), `selection`, `instruction`, and `kind`.
   route can't distinguish "no such draft" from "not yours", and doesn't
   try. See `USER_SCOPING.md` and
   `migrations/2026-09-01_user_scoping.sql`.
-- **One edit in flight.** New selections are ignored while a proposal is
-  open. No batch review, no multiple pending spans.
+- **One span edit in flight.** New selections are ignored, and the doc is
+  briefly not directly editable, while a span proposal is open. No batch
+  review, no multiple pending spans.
+- **Manual edit is a full-span replace.** Typing into the `<pre>` and
+  letting it save records the whole new draft as one revision
+  (`instruction = "(manual edit)"`, `span_start = 0`,
+  `span_len = len(current)`), spliced by the same `apply_revision` /
+  `replay`. It is *not* the deferred whole-draft AI mode below — no
+  capability call, just the user's own text.
+- **The `<pre>` is `contenteditable`, with Enter and paste intercepted.**
+  Left to the browser, Enter in a contenteditable reaches for a `<div>` /
+  `<br>` — an element, not a `"\n"` character — which `textContent` drops
+  or splits with no separator, desyncing the span-selection offsets.
+  `draft-edit.js` inserts the character itself via a `Range`, and does
+  the same for a paste (plain text only, HTML formatting stripped). A
+  change autosaves on blur, or is flushed first if Download or Undo is
+  used before that fires — either always acts on what's on screen. This
+  choice was deliberate: it reuses the existing Range-based
+  selection-offset code for the span-revision flow untouched, rather than
+  swapping the `<pre>` for a `<textarea>`, which has no equivalent API for
+  positioning the floating **Revise…** button at a text selection.
 - **Raw Markdown, not rendered.** The editor shows the draft as source in
   a `<pre>` so selection offsets map 1:1 to the stored text with no
   DOM-range-to-source mapping. A "preview rendered" toggle is a later

@@ -3,14 +3,15 @@
 {% block main %}
 <section class="panel draft"
          data-draft-id="{{ draft.id }}"
+         data-revision-count="{{ draft.revisions | length }}"
          data-capability="{{ capability }}"
          data-capability-version="{{ capability_version }}">
   <p class="crumb"><a href="/p/{{ draft.slug }}">&larr; {{ draft.slug }}</a></p>
   <h1>Editing draft</h1>
   <p class="lede">
-    Select any part of the text below, tell the editor what to change, and it
-    revises just that span — the rest of the draft is left alone. One edit at a
-    time: accept or reject a proposal before starting the next.
+    Edit the text directly, or select a span and tell the editor what to
+    change — it revises just that span. Either way, <strong>Undo last</strong>
+    reverts the change and <strong>Download .md</strong> saves what's on screen.
   </p>
 
   <div class="draft__toolbar">
@@ -20,8 +21,9 @@
   {# The newline right after <pre> is swallowed by the browser (HTML rule),
      so a draft whose text itself starts with a newline still lines up 1:1
      with the character offsets the editor computes. Keep it. #}
-  <pre class="draft__doc" id="draft-doc">
+  <pre class="draft__doc" id="draft-doc" contenteditable="true" spellcheck="true">
 {{ draft.current }}</pre>
+  <p class="error" id="draft-doc-error" hidden></p>
 
   <button type="button" class="draft__revise-btn" id="draft-revise-btn" hidden>Revise…</button>
 

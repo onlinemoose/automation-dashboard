@@ -3,6 +3,92 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-02 — Result view: trim the secondary section's chrome
+
+Branch `new-user-flow`. On the Cover Letter / CV result view the header
+crumb link (`← Cover Letter Writer`) is gone — it led to a bare,
+unrelated-looking form, and **Run again** already covers going back. The
+working / error holding views keep their crumb.
+
+`Section` gains `editable: bool = True`. Both writers mark their
+`"What it targeted"` note `editable=False`, and `_result_panel.html`
+gates the **Edit draft** button on `section.editable | default(true)` —
+the note is read / download only, but an undefined value (a stale
+`Section` before a server restart, an old saved row) still shows the
+button rather than silently dropping it; only an explicit `False` hides
+it. `_result_payload` / `_saved_result` carry the flag so a re-shown
+saved result matches. Tests in `test_jobs.py` assert the note has a
+Download link but no `action="/drafts"` form, exactly one **Edit draft**
+button on the result view, and no `class="crumb"`.
+
+## 2026-09-02 — Writer results persist per job post
+
+Branch `new-user-flow`. A finished **Cover Letter Writer** / **CV Writer**
+run is now saved on the job post it was written for, and re-opening that
+writer for the same job shows the saved result instead of a blank form.
+
+- `job_posts` gets two nullable `jsonb` columns, `cover_letter` and
+  `tailored_cv` (one per writer). `_jobs.py`: `JobPost` gains the two
+  fields, `RESULT_SLOTS`, an `_as_result()` jsonb coalescer, and
+  `update_job_post(..., cover_letter=…, tailored_cv=…)` following the same
+  `None` = "leave alone" partial-merge as `emphasis` / `summary`.
+- `Page` gains `saved_result_slot: str | None` — the column name. Set to
+  `"cover_letter"` / `"tailored_cv"` on the two writer pages; unset
+  elsewhere. Not a route branch on `slug`, so the guardrail holds.
+- `app.py`: `_result_payload()` stores the rendered `sections` + the
+  `RunMeta` fields + a `saved_at` stamp; `_saved_result()` rebuilds
+  `Section` / `RunMeta` from it. `POST /p/<slug>` reads `job_post_id` from
+  the form (an app-storage key, like `background_document_ids` — never a
+  capability `Input` field) and, after a successful `run()`, writes the
+  payload to the slot — in the streamed slow path too, best-effort so a
+  store failure never sinks the response. `GET /p/<slug>?job_post_id=<id>`
+  renders the result view from the slot when it's set.
+- `_result_panel.html`: **Run again** carries `?job_post_id=<id>&rerun=1`
+  when a `job_post_id` is in context; `rerun` skips the saved-result view
+  and opens the form with the job kept. No visible UI change otherwise.
+- Stub mode saves nothing (no real `run()`); a run with no job post
+  picked saves nothing.
+- **Supabase migration** (run once): `alter table job_posts add column if
+  not exists cover_letter jsonb;` and `… tailored_cv jsonb;`. Nullable
+  `jsonb`, no default — metadata-only, inherits the table's RLS/grants.
+  Full DDL in `docs/JOB_POSTS.md`.
+- Tests in `tests/test_jobs.py`: slot round-trip + scoping; the saved
+  view shows for its job and not the form (asserts no `<textarea>` /
+  `action="/p/…"`); `?rerun=1` forces the form with the job kept; a
+  finished run lands in the right slot only; no-job-post run saves
+  nothing. `tests/test_pages.py` unchanged (its posts carry no
+  `job_post_id`).
+
+## 2026-09-02 — Manual edits on the draft editor
+
+Branch `new-user-flow`. The "Editing draft" page (`/drafts/{id}`, shared
+by Cover Letter and CV) only allowed AI span revisions even though the UI
+implied hand-editing. First cut added a separate **Edit text** toggle
+(read-only `<pre>` swaps for a textarea) — reworked after feedback that a
+second edit mode inside what's already a form view was poor UX. The
+`<pre>` is directly editable instead: no button, no mode switch.
+
+- `POST /drafts/{id}/edit` → `_drafts.record_manual_edit(...)`, which
+  appends one whole-span `Revision` (`instruction = "(manual edit)"`).
+  No `_drafts` backend or schema change — it rides the existing
+  `apply_revision` / `replay` / undo path, so `original` stays immutable,
+  the edit shows in History, and `Undo last` reverts it. No-op when the
+  text is unchanged. (Unchanged from the first cut.)
+- `templates/draft.html`: `#draft-doc` is now `contenteditable="true"`.
+  `draft-edit.js` intercepts Enter and paste so it stays plain text (a
+  browser's native contenteditable handling of Enter reaches for a
+  `<div>`/`<br>`, which `textContent` doesn't render as `"\n"` — it would
+  desync the span-selection offsets), tracks a dirty flag, and autosaves
+  on blur — flushed first if Download or Undo is used before that fires.
+  A span proposal still briefly sets `contentEditable = "false"` while
+  open ("one edit in flight").
+- Deliberately *not* a `<textarea>`: that would need rewriting the
+  Range-based span-selection/offset code the AI-revise flow already
+  relies on, and textareas have no equivalent to `Range.getBoundingClientRect()`
+  for placing the floating **Revise…** button at a selection. contenteditable
+  reuses that code untouched.
+- `test_guardrails.py` ALLOWED_ROUTES gets `/drafts/{draft_id}/edit`.
+
 ## 2026-09-01 — CV comes from a saved document, not a paste
 
 Branch `new-user-flow`. Both writers lose the `cv` textarea; the CV is now

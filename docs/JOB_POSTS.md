@@ -34,12 +34,39 @@ picked id into `job_posting` text and an `emphasis` list.
    CV document, then Run. From the **Job posts** list, an analysed row
    carries shortcut icons straight to each writer with that job
    preselected (`/p/<writer>?job_post_id=<id>`).
+5. The finished letter / CV is **saved on the job post**. Coming back to
+   that writer for the same job (`/p/<writer>?job_post_id=<id>`, including
+   the list shortcut icons) shows the saved result in place of the form.
+   **Run again** on that view reopens the form with the job still picked
+   (`&rerun=1`); a fresh run overwrites the stored result.
 
 On the **Job posts** list each row has an actions cell on the right:
 a delete icon always; once the post is analysed, a Cover Letter and a CV
 icon appear to its left, each linking to that writer with this job
 preselected (`page_form` honours `?job_post_id=`; a foreign / unknown id
 just preselects nothing).
+
+## Saved writer results
+
+Each job post carries two nullable `jsonb` slots — `cover_letter` and
+`tailored_cv` — one per writer page. A completed run on
+`POST /p/<writer>` (with a job post picked) is written to its slot by
+`_save_result()` in `app.py`: the rendered `sections` (heading + Markdown)
+plus the `RunMeta` cost fields and a `saved_at` stamp — the app's own
+display copy, enough to re-render the result view, never fed back into a
+capability. The page's `Page.saved_result_slot` names the column
+(`"cover_letter"` / `"tailored_cv"`); `_jobs.RESULT_SLOTS` lists them.
+
+`GET /p/<writer>?job_post_id=<id>` reads the slot and, if set, renders the
+result view instead of the form (`_saved_result()` rebuilds `Section` /
+`RunMeta`). `&rerun=1` on that URL — what the result view's **Run again**
+button uses — bypasses this and shows the form with the job preselected.
+A slot is only ever written (overwritten by the next run), never cleared
+by the app; deleting the job post drops it with the row.
+
+`update_job_post(..., cover_letter=<dict>)` / `tailored_cv=<dict>` follow
+the same partial-merge rule as `emphasis` / `summary`: `None` means "leave
+this slot alone".
 
 The detail screen is three states, chosen by `job.emphasis` (empty vs not)
 and an `?edit=1` query flag: **reading** (Edit + Analyse), **edit**
@@ -179,13 +206,15 @@ In the SQL editor:
 
 ```sql
 create table job_posts (
-  id         uuid primary key default gen_random_uuid(),
-  title      text not null,
-  posting    text not null,
-  emphasis   text not null default '',
-  summary    text not null default '',
-  updated_at timestamptz not null default now(),
-  user_id    uuid not null references auth.users(id) on delete cascade
+  id           uuid primary key default gen_random_uuid(),
+  title        text not null,
+  posting      text not null,
+  emphasis     text not null default '',
+  summary      text not null default '',
+  cover_letter jsonb,
+  tailored_cv  jsonb,
+  updated_at   timestamptz not null default now(),
+  user_id      uuid not null references auth.users(id) on delete cascade
 );
 
 create index if not exists job_posts_user_id_idx on job_posts (user_id);
@@ -194,16 +223,21 @@ grant all privileges on table job_posts to service_role;
 alter table job_posts enable row level security;
 ```
 
-**Migration for an existing deployment** (the `summary` column was added
-after the table shipped) — run once in the SQL editor:
+**Migrations for an existing deployment** — run once each in the SQL editor:
 
 ```sql
+-- the summary column was added after the table shipped
 alter table job_posts add column if not exists summary text not null default '';
+
+-- the saved writer-result slots (Cover Letter / CV re-shown per job post)
+alter table job_posts add column if not exists cover_letter jsonb;
+alter table job_posts add column if not exists tailored_cv  jsonb;
 ```
 
-Adding a `text` column with a constant default is metadata-only on
-Postgres — instant, no table rewrite, no meaningful lock. It inherits the
-table's existing RLS and grants.
+Adding a `text` column with a constant default, or a nullable `jsonb`
+column with no default, is metadata-only on Postgres — instant, no table
+rewrite, no meaningful lock. Each inherits the table's existing RLS and
+grants.
 
 Uses `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` (already declared for
 Background documents). If either is missing, `_jobs.py` uses a process-local
@@ -230,7 +264,8 @@ for local dev and tests; set the vars for anything real.
   alike, and each public function takes the owning user's id as its last
   required argument (`list_job_posts(user_id)`,
   `get_job_post(job_id, user_id)`, `create_job_post(title, posting, user_id)`,
-  `update_job_post(job_id, user_id, *, title=…, posting=…, emphasis=…)`,
+  `update_job_post(job_id, user_id, *, title=…, posting=…, emphasis=…,
+  summary=…, cover_letter=…, tailored_cv=…)`,
   `delete_job_post(job_id, user_id)`). Another user's post is invisible:
   absent from the list and the picker, `None` from `get`, a no-op to update
   or delete, and a 404 over HTTP. See `USER_SCOPING.md` and

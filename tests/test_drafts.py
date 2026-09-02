@@ -202,6 +202,53 @@ def test_undo_with_no_revisions_is_a_noop():
     assert back.revisions == []
 
 
+def test_record_manual_edit_replaces_current_and_is_undoable():
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    new = "A hand-written replacement.\n\nWith two paragraphs."
+    updated = _drafts.record_manual_edit(draft.id, USER, text=new)
+    assert updated.current == new
+    assert len(updated.revisions) == 1
+    assert updated.revisions[0].instruction == _drafts.MANUAL_EDIT
+    assert _drafts.get_draft(draft.id, USER).original == TEXT  # never mutated
+
+    back = _drafts.undo_last(draft.id, USER)
+    assert back.current == TEXT
+    assert back.revisions == []
+
+
+def test_manual_edit_layers_on_and_off_a_span_revision():
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    _drafts.record_revision(
+        draft.id, USER, instruction="shout", selection="fox",
+        span_start=TEXT.index("fox"), span_len=3, revised="FOX", note="", cost={},
+    )
+    after_span = _drafts.get_draft(draft.id, USER).current
+    _drafts.record_manual_edit(draft.id, USER, text=after_span + "\n\nPS.")
+    assert _drafts.get_draft(draft.id, USER).current == after_span + "\n\nPS."
+
+    back = _drafts.undo_last(draft.id, USER)  # drop the manual edit
+    assert back.current == after_span
+    assert len(back.revisions) == 1
+
+
+def test_manual_edit_is_a_noop_when_text_is_unchanged():
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    same = _drafts.record_manual_edit(draft.id, USER, text=TEXT)
+    assert same.revisions == []
+
+
+def test_manual_edit_normalises_crlf():
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    updated = _drafts.record_manual_edit(draft.id, USER, text="line one\r\nline two")
+    assert updated.current == "line one\nline two"
+
+
+def test_manual_edit_of_a_foreign_draft_is_none():
+    mine = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, "user-a")
+    assert _drafts.record_manual_edit(mine.id, "user-b", text="hijack") is None
+    assert _drafts.get_draft(mine.id, "user-a").current == TEXT
+
+
 # --- the routes -------------------------------------------------------
 
 
@@ -227,6 +274,14 @@ def test_editor_page_renders_the_current_text(client: TestClient):
     body = client.get(f"/drafts/{draft.id}").text
     assert "quick brown fox" in body
     assert "draft-edit.js" in body
+
+
+def test_editor_page_lets_the_doc_be_edited_directly(client: TestClient):
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    body = client.get(f"/drafts/{draft.id}").text
+    # the draft <pre> is directly editable — no separate edit mode/button
+    assert '<pre class="draft__doc" id="draft-doc" contenteditable="true"' in body
+    assert 'id="draft-edit-btn"' not in body
 
 
 def test_revise_returns_a_proposal_without_mutating(client: TestClient):
@@ -330,6 +385,35 @@ def test_accept_then_undo_route_reverts(client: TestClient):
     assert resp.status_code == 200
     assert resp.json()["revision_count"] == 0
     assert _drafts.get_draft(draft.id, USER).current == TEXT
+
+
+def test_manual_edit_route_replaces_and_records(client: TestClient):
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    resp = client.post(f"/drafts/{draft.id}/edit", data={"text": "Rewritten by hand."})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["current"] == "Rewritten by hand."
+    assert resp.json()["revision_count"] == 1
+    assert resp.json()["can_undo"] is True
+    assert _drafts.get_draft(draft.id, USER).current == "Rewritten by hand."
+
+
+def test_manual_edit_route_then_undo_reverts(client: TestClient):
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    client.post(f"/drafts/{draft.id}/edit", data={"text": "hand edit"})
+    resp = client.post(f"/drafts/{draft.id}/undo")
+    assert resp.json()["revision_count"] == 0
+    assert _drafts.get_draft(draft.id, USER).current == TEXT
+
+
+def test_manual_edit_route_rejects_an_empty_draft(client: TestClient):
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    resp = client.post(f"/drafts/{draft.id}/edit", data={"text": "   "})
+    assert resp.status_code == 422
+    assert _drafts.get_draft(draft.id, USER).current == TEXT
+
+
+def test_manual_edit_route_unknown_draft_is_404(client: TestClient):
+    assert client.post("/drafts/nope/edit", data={"text": "x"}).status_code == 404
 
 
 def test_download_returns_the_current_markdown(client: TestClient):

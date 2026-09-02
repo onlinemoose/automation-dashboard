@@ -15,6 +15,7 @@ without Supabase (nothing persists across restarts).
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 import warnings
@@ -24,6 +25,23 @@ from typing import Protocol
 
 _TABLE = "job_posts"
 
+# The writer-page result slots on a job post — one jsonb column each,
+# holding a rendered run (sections + cost meta) so re-opening the page for
+# this job post shows the saved result instead of a blank form. `None`
+# until that writer has run against this post. See docs/JOB_POSTS.md.
+RESULT_SLOTS = ("cover_letter", "tailored_cv")
+
+
+def _as_result(value: object) -> dict | None:
+    """A saved writer result from a jsonb column: a dict, or `None` when
+    unset. Postgres jsonb occasionally arrives as a JSON string."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except ValueError:
+            return None
+    return value if isinstance(value, dict) and value else None
+
 
 @dataclass(frozen=True)
 class JobPost:
@@ -32,6 +50,11 @@ class JobPost:
     posting: str  # the raw job posting text
     emphasis: str  # the annotated emphasis list (">" quote / "-" note format); "" until analysed
     summary: str = ""  # the analysis summary (Markdown); "" until analysed and saved
+    # Saved writer results, keyed by the page's `saved_result_slot`. `None`
+    # until that writer runs against this post; a dict of {sections, meta,
+    # saved_at} once it has. App-owned display data, never capability input.
+    cover_letter: dict | None = None
+    tailored_cv: dict | None = None
     updated_at: datetime | None = None
     user_id: str = ""  # the Supabase auth.users id that owns this row
 
@@ -58,6 +81,8 @@ class _Backend(Protocol):
         posting: str | None = None,
         emphasis: str | None = None,
         summary: str | None = None,
+        cover_letter: dict | None = None,
+        tailored_cv: dict | None = None,
     ) -> JobPost | None: ...
     def delete(self, job_id: str, user_id: str) -> None: ...
 
@@ -106,6 +131,8 @@ class _MemoryBackend:
         posting: str | None = None,
         emphasis: str | None = None,
         summary: str | None = None,
+        cover_letter: dict | None = None,
+        tailored_cv: dict | None = None,
     ) -> JobPost | None:
         with self._lock:
             current = self._jobs.get(job_id)
@@ -119,6 +146,8 @@ class _MemoryBackend:
                 posting=current.posting if posting is None else posting,
                 emphasis=current.emphasis if emphasis is None else emphasis,
                 summary=current.summary if summary is None else summary,
+                cover_letter=current.cover_letter if cover_letter is None else cover_letter,
+                tailored_cv=current.tailored_cv if tailored_cv is None else tailored_cv,
                 updated_at=datetime.now(timezone.utc),
                 user_id=current.user_id,  # the rebuilt row keeps its owner
             )
@@ -149,6 +178,8 @@ class _SupabaseBackend:
             posting=row.get("posting") or "",
             emphasis=row.get("emphasis") or "",
             summary=row.get("summary") or "",
+            cover_letter=_as_result(row.get("cover_letter")),
+            tailored_cv=_as_result(row.get("tailored_cv")),
             updated_at=_parse_ts(row.get("updated_at")),
             user_id=row.get("user_id") or "",
         )
@@ -186,6 +217,8 @@ class _SupabaseBackend:
         posting: str | None = None,
         emphasis: str | None = None,
         summary: str | None = None,
+        cover_letter: dict | None = None,
+        tailored_cv: dict | None = None,
     ) -> JobPost | None:
         payload: dict[str, object] = {"updated_at": datetime.now(timezone.utc).isoformat()}
         if title is not None:
@@ -196,6 +229,10 @@ class _SupabaseBackend:
             payload["emphasis"] = emphasis
         if summary is not None:
             payload["summary"] = summary
+        if cover_letter is not None:
+            payload["cover_letter"] = cover_letter
+        if tailored_cv is not None:
+            payload["tailored_cv"] = tailored_cv
         res = (
             self._table()
             .update(payload)
@@ -270,9 +307,18 @@ def update_job_post(
     posting: str | None = None,
     emphasis: str | None = None,
     summary: str | None = None,
+    cover_letter: dict | None = None,
+    tailored_cv: dict | None = None,
 ) -> JobPost | None:
     return _store().update(
-        job_id, user_id, title=title, posting=posting, emphasis=emphasis, summary=summary
+        job_id,
+        user_id,
+        title=title,
+        posting=posting,
+        emphasis=emphasis,
+        summary=summary,
+        cover_letter=cover_letter,
+        tailored_cv=tailored_cv,
     )
 
 

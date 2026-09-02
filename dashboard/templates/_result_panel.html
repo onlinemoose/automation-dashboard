@@ -1,18 +1,25 @@
 {# The result view's panel, on its own so the streamed "slow page" response
    (_running_close.html) can reuse the exact same markup the plain
-   result.html renders. Needs: page, sections, meta. #}
+   result.html renders. Needs: page, sections, meta. Optional: job_post_id
+   — when set, "Run again" returns to this writer's form with that job post
+   still selected (?rerun=1 forces the form past the saved-result view). #}
 <section class="panel">
-  <p class="crumb"><a href="/p/{{ page.slug }}">&larr; {{ page.title }}</a></p>
   {% for section in sections %}
   <article class="result">
     <div class="result__head">
       <h2>{{ section.heading }}</h2>
+      {# default(true): a section is editable unless a page opts out with
+         editable=False. `default` only fills in an undefined value (a
+         stale Section without the field, an old saved row) — an explicit
+         False still hides the button. #}
+      {% if section.editable | default(true) %}
       <form class="result__edit" method="post" action="/drafts">
         <input type="hidden" name="slug" value="{{ page.slug }}">
         <input type="hidden" name="section" value="{{ section.heading | lower | replace(' ', '-') }}">
         <input type="hidden" name="text" value="{{ section.markdown }}">
         <button type="submit" class="button button--ghost">Edit draft</button>
       </form>
+      {% endif %}
       <a class="button button--ghost"
          download="{{ page.slug }}-{{ section.heading | lower | replace(' ', '-') }}.md"
          href="data:text/markdown;charset=utf-8,{{ section.markdown | urlencode }}">Download .md</a>
@@ -34,5 +41,5 @@
   </footer>
   {% endif %}
 
-  <p><a class="button" href="/p/{{ page.slug }}">Run again</a></p>
+  <p><a class="button" href="/p/{{ page.slug }}{% if job_post_id %}?job_post_id={{ job_post_id | urlencode }}&amp;rerun=1{% endif %}">Run again</a></p>
 </section>

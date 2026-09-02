@@ -205,6 +205,7 @@ button:hover, .button:hover { filter: brightness(1.05); }
   font: 0.8125rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   max-height: 62vh; overflow: auto;
 }
+.draft__doc:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .draft__doc::selection, .draft__doc ::selection { background: #b9d9cd; }
 @media (prefers-color-scheme: dark) {
   .draft__doc::selection, .draft__doc ::selection { background: #2f5a4b; }

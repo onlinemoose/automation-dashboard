@@ -23,7 +23,7 @@ dependencies, `run()` called directly — and nothing depends on it.
 | `example_output` | a canned `Output`; lets tests run the page offline |
 | `build_input(form)` | turn the submitted form dict into the capability's `Input` (raise `FormError` for bad input) |
 | `run(input)` | the capability's `run` — the *only* call into it |
-| `sections(output)` | turn the `Output` into `Section(heading, markdown)` blocks |
+| `sections(output)` | turn the `Output` into `Section(heading, markdown, editable=True)` blocks — `editable=False` drops that section's "Edit draft" button (read / download only) |
 | `run_meta(output)` | *optional.* Map the `Output` to a `RunMeta` (cost + token counts) for the result-page cost footer. Leave unset if the capability reports no cost. |
 
 A `Field` has a `name` (must match the `Input` argument), a `label`, a
@@ -129,7 +129,8 @@ def build_input(form):
 
 def sections(out: Output):
     return [Section("Cover letter", out.cover_letter),
-            Section("What it targeted", out.targeting_note)]
+            # editable=False -> read/download only, no "Edit draft" button
+            Section("What it targeted", out.targeting_note, editable=False)]
 
 EXAMPLE_OUTPUT = Output(cover_letter="_(example letter)_", targeting_note="_(example note)_")
 
@@ -279,3 +280,17 @@ until the first word arrives, then `Writing… 640 words · 1:12` off its
 own 1-second clock (the server sends only the word count). No percentage:
 there's no honest denominator. If the capability has no `on_progress`,
 leave `progress` unset and the page falls back to the bare keepalive.
+
+### Saved results (`saved_result_slot`)
+
+A job-post-driven page can persist its finished run so returning to the
+page for that job post shows the result instead of a blank form. Set
+`saved_result_slot` to the `job_posts` column it writes to — `"cover_letter"`
+for Cover Letter Writer, `"tailored_cv"` for CV Writer. On a successful
+run with a job post picked, the submit route stores the rendered sections
+plus the cost meta there (`_result_payload` / `_save_result` in `app.py`);
+`GET /p/<slug>?job_post_id=<id>` rebuilds the result view from it
+(`_saved_result`). The "Run again" button links back with `&rerun=1`,
+which skips the saved view and opens the form with the job still selected.
+Pages not driven by a job post leave `saved_result_slot` unset. See
+`docs/JOB_POSTS.md` for the store side and the migration.

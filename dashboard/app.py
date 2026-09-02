@@ -16,6 +16,7 @@ import logging
 import os
 import secrets
 import warnings
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -36,7 +37,7 @@ from dashboard import _auth, _documents, _drafts, _job_analysis, _jobs, _targete
 from dashboard._auth import is_authed
 from dashboard._render import to_html
 from dashboard.pages import PAGES_BY_SLUG
-from dashboard.pages._spec import FormError, Page, RunMeta
+from dashboard.pages._spec import FormError, Page, RunMeta, Section
 
 _HERE = Path(__file__).resolve().parent
 _TEMPLATES = _HERE / "templates"
@@ -101,6 +102,60 @@ def _form_values(raw, page: Page) -> dict[str, object]:
         else:
             values[key] = str(raw.get(key))
     return values
+
+
+_META_FIELDS = (
+    "capability", "capability_version", "cost_usd", "input_tokens",
+    "output_tokens", "cache_read_input_tokens", "cache_write_input_tokens",
+)
+
+
+def _result_payload(page: Page, output: object) -> dict:
+    """The app's own record of a finished writer run, for the Job posts
+    store: the rendered sections plus the cost meta — everything the result
+    view needs to re-render exactly. Stored as jsonb (see docs/JOB_POSTS.md)."""
+    meta = page.run_meta(output) if page.run_meta else None
+    return {
+        "sections": [
+            {"heading": s.heading, "markdown": s.markdown, "editable": s.editable}
+            for s in page.sections(output)
+        ],
+        "meta": {f: getattr(meta, f) for f in _META_FIELDS} if meta else None,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _saved_result(payload: object) -> tuple[list[Section], RunMeta | None] | None:
+    """Rebuild `(sections, meta)` from a `_result_payload` dict read back
+    from the store. `None` when there is nothing usable to show."""
+    if not isinstance(payload, dict):
+        return None
+    sections = [
+        Section(
+            heading=str(s.get("heading") or ""),
+            markdown=str(s.get("markdown") or ""),
+            editable=bool(s.get("editable", True)),
+        )
+        for s in (payload.get("sections") or [])
+        if isinstance(s, dict)
+    ]
+    if not sections:
+        return None
+    raw_meta = payload.get("meta")
+    meta = (
+        RunMeta(**{f: raw_meta.get(f) for f in _META_FIELDS})
+        if isinstance(raw_meta, dict) and raw_meta
+        else None
+    )
+    return sections, meta
+
+
+def _save_result(page: Page, job_post_id: str, user_id: str, output: object) -> None:
+    """Persist a finished run against the job post it was written for, in
+    the page's `saved_result_slot` column of the Job posts store."""
+    _jobs.update_job_post(
+        job_post_id, user_id, **{page.saved_result_slot: _result_payload(page, output)}
+    )
 
 
 def _session_secret() -> str:
@@ -207,14 +262,24 @@ def create_app(
             return []
         return await run_in_threadpool(_jobs.list_job_posts, user_id)
 
-    def _result_page(request: Request, page: Page, output: object) -> Response:
+    def _result_page(
+        request: Request, page: Page, output: object, job_post_id: str | None = None
+    ) -> Response:
         meta = page.run_meta(output) if page.run_meta else None
         return render(
             "result.html", request,
             page=page, sections=page.sections(output), meta=meta,
+            job_post_id=job_post_id,
         )
 
-    def _streamed_result(request: Request, page: Page, data: object) -> StreamingResponse:
+    def _streamed_result(
+        request: Request,
+        page: Page,
+        data: object,
+        *,
+        job_post_id: str | None = None,
+        user_id: str | None = None,
+    ) -> StreamingResponse:
         """The result of a `slow=True` page, streamed.
 
         Flush the holding view straight away, then — while `run()` works in
@@ -273,10 +338,17 @@ def create_app(
                     page=page, error=type(exc).__name__, user_email=user_email,
                 )
                 return
+            if page.saved_result_slot and job_post_id and user_id:
+                try:
+                    await run_in_threadpool(
+                        _save_result, page, job_post_id, user_id, output
+                    )
+                except Exception:  # noqa: BLE001 - saving must not sink the result
+                    _log.exception("slow page %s: saving the result failed", page.slug)
             meta = page.run_meta(output) if page.run_meta else None
             yield tpl("_running_close.html").render(
                 page=page, sections=page.sections(output), meta=meta,
-                user_email=user_email,
+                user_email=user_email, job_post_id=job_post_id,
             )
 
         return StreamingResponse(
@@ -294,13 +366,28 @@ def create_app(
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
+        jpid = request.query_params.get("job_post_id")
+        # If this writer has already run against the picked job post, show
+        # that saved result instead of a blank form. `?rerun=1` (the "Run
+        # again" button) skips this and opens the form with the job kept.
+        if page.saved_result_slot and jpid and "rerun" not in request.query_params:
+            job_post = await run_in_threadpool(_jobs.get_job_post, jpid, uid)
+            view = _saved_result(
+                getattr(job_post, page.saved_result_slot, None) if job_post else None
+            )
+            if view is not None:
+                sections, meta = view
+                return render(
+                    "result.html", request,
+                    page=page, sections=sections, meta=meta, job_post_id=jpid,
+                )
         prefill = dict(page.example_form) if request.query_params.get("example") else {}
         # A link from a saved job post can preselect the "Load a saved job
         # post" picker (?job_post_id=…). A foreign / unknown id simply won't
         # match any option, and build_input already ignores one it can't
         # resolve for this user.
         picker = next((f.name for f in page.fields if f.widget == "picker"), None)
-        if picker and (jpid := request.query_params.get("job_post_id")):
+        if picker and jpid:
             prefill[picker] = jpid
         return render(
             "page.html", request,
@@ -317,6 +404,10 @@ def create_app(
         if page is None:
             raise HTTPException(status_code=404)
         form = _form_values(await request.form(), page)
+        # The job post this run is written for (an app-storage key, like
+        # `background_document_ids` — never a capability `Input` field). A
+        # finished run is saved against it, and `page_form` re-shows that.
+        job_post_id = str(form.get("job_post_id") or "").strip() or None
         try:
             # `build_input` may hit the Background documents store to resolve a
             # picked id — run it off the event loop like `run()` itself. It
@@ -330,16 +421,21 @@ def create_app(
                 documents=await _doc_choices(page, uid), jobs=await _job_choices(page, uid),
             )
         if app.state.stub_runs:
-            return _result_page(request, page, page.example_output)  # no capability call
+            # No capability call, so nothing real to save.
+            return _result_page(request, page, page.example_output, job_post_id)
         if page.slow:
             # A minutes-long `run()` would blow a hosting proxy's response
             # timeout before the first byte. Stream instead (see below).
-            return _streamed_result(request, page, data)
+            return _streamed_result(
+                request, page, data, job_post_id=job_post_id, user_id=uid
+            )
         # `run()` is synchronous and can take 30–60s (LLM call). Offload it
         # to a worker thread so the event loop stays free to answer other
         # requests — including the platform health check.
         output = await run_in_threadpool(page.run, data)
-        return _result_page(request, page, output)
+        if page.saved_result_slot and job_post_id:
+            await run_in_threadpool(_save_result, page, job_post_id, uid, output)
+        return _result_page(request, page, output, job_post_id)
 
     # --- background documents -------------------------------------------
     # The app's own store (CLAUDE.md rule 6), not a capability. Notes here
@@ -584,10 +680,11 @@ def create_app(
 
     # --- working drafts ------------------------------------------------
     # The app's own store (CLAUDE.md rule 6), not a capability. A result
-    # section can be opened as an editable draft; the user selects a span,
-    # gives an instruction, and the `targeted-editor` capability revises
-    # that span only. The splice, linear history, and undo-by-replay are
-    # the app's own (`_drafts.py`). See `docs/DRAFTS.md`.
+    # section can be opened as an editable draft and changed two ways: a
+    # span revision (select text, give an instruction, `targeted-editor`
+    # rewrites that span) or a free-form manual edit of the whole draft.
+    # Either is recorded as one revision; the splice, linear history, and
+    # undo-by-replay are the app's own (`_drafts.py`). See `docs/DRAFTS.md`.
 
     def _draft_state(draft: _drafts.Draft) -> dict:
         return {
@@ -733,6 +830,24 @@ def create_app(
             return redirect
         uid = _auth.current_user_id(request)
         updated = await run_in_threadpool(_drafts.undo_last, draft_id, uid)
+        if updated is None:
+            raise HTTPException(status_code=404)
+        return JSONResponse(_draft_state(updated))
+
+    @app.post("/drafts/{draft_id}/edit")
+    async def draft_manual_edit(request: Request, draft_id: str):
+        """A free-form manual edit of the whole draft — no capability call.
+        Recorded as one revision so `Undo last` reverts it."""
+        if (redirect := guard(request)) is not None:
+            return redirect
+        uid = _auth.current_user_id(request)
+        form = await request.form()
+        text = str(form.get("text") or "")
+        if not text.strip():
+            return JSONResponse({"error": "The draft can't be empty."}, status_code=422)
+        updated = await run_in_threadpool(
+            lambda: _drafts.record_manual_edit(draft_id, uid, text=text)
+        )
         if updated is None:
             raise HTTPException(status_code=404)
         return JSONResponse(_draft_state(updated))

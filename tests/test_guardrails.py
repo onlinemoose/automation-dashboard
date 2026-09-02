@@ -27,7 +27,8 @@ ALLOWED_ROUTES = {
     # Working drafts — the app's own store (docs/DRAFTS.md), app-native like
     # /documents and /jobs, not a per-capability page.
     "/drafts", "/drafts/{draft_id}", "/drafts/{draft_id}/revise",
-    "/drafts/{draft_id}/accept", "/drafts/{draft_id}/undo", "/drafts/{draft_id}/download",
+    "/drafts/{draft_id}/accept", "/drafts/{draft_id}/undo", "/drafts/{draft_id}/edit",
+    "/drafts/{draft_id}/download",
 }
 ROUTE_DECORATORS = {"get", "post", "put", "patch", "delete", "head", "options", "route", "api_route"}
 

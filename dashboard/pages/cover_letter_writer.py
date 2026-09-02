@@ -198,7 +198,9 @@ def build_input(form, user_id: str) -> Input:
 def sections(output: Output) -> list[Section]:
     return [
         Section("Cover letter", output.cover_letter),
-        Section("What it targeted", output.targeting_note),
+        # A read-only note on what the letter aimed at — not something you
+        # revise span by span, so no "Edit draft".
+        Section("What it targeted", output.targeting_note, editable=False),
     ]
 
 
@@ -232,4 +234,8 @@ PAGE = Page(
     # cover-letter-writer's run() takes an on_progress callback (v0.13.0+)
     # — the holding view shows a live word count.
     progress=True,
+    # A finished letter is saved against the job post it was written for
+    # (the `cover_letter` column on `job_posts`); re-opening this page for
+    # that post shows it instead of a blank form.
+    saved_result_slot="cover_letter",
 )
