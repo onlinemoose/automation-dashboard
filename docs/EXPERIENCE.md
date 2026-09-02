@@ -28,13 +28,15 @@ dependencies, `run()` called directly — and nothing depends on it.
 
 A `Field` has a `name` (must match the `Input` argument), a `label`, a
 `widget` (`text` / `textarea` / `number` / `lines` / `checklist` /
-`picker` / `doc_picker`), `required`, and `help` text. `lines` is a
+`doc_picker` / `hidden`), `required`, and `help` text. `lines` is a
 textarea where each non-blank line becomes one list item — use it for
 `list[str]` inputs. `checklist` renders one checkbox per saved document
 and submits a list of ids; `doc_picker` is a `<select>` of saved
-documents submitting one id (`picker` is the same over saved Job posts).
-Read a checklist with `FormReader.multi(name)` and a picker with
-`FormReader.text(name)`, then resolve the ids through
+documents submitting one id. `hidden` is an `<input type="hidden">` with
+no label — its value comes from the URL, not the user (the writer pages'
+`job_post_id`, carried from `?job_post_id=<id>`; a bare visit to such a
+page redirects to `/jobs`). Read a checklist with `FormReader.multi(name)`
+and the others with `FormReader.text(name)`, then resolve the ids through
 `dashboard._documents` / `dashboard._jobs` (see
 `docs/BACKGROUND_DOCUMENTS.md`, `docs/JOB_POSTS.md`). Those `name`s are
 app-storage keys — the fields whose names deliberately don't match an

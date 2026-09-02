@@ -87,8 +87,11 @@ def _wants_documents(page: Page) -> bool:
     return any(f.widget in ("checklist", "doc_picker") for f in page.fields)
 
 
-def _wants_jobs(page: Page) -> bool:
-    return any(f.widget == "picker" for f in page.fields)
+def _job_post_driven(page: Page) -> bool:
+    """True when this page is entered from a Job post — it carries a hidden
+    `job_post_id` (the writer pages). A bare visit to such a page has no
+    job to work from and is redirected to `/jobs`."""
+    return any(f.name == "job_post_id" for f in page.fields)
 
 
 def _form_values(raw, page: Page) -> dict[str, object]:
@@ -257,11 +260,6 @@ def create_app(
             return []
         return await run_in_threadpool(_documents.list_documents, user_id)
 
-    async def _job_choices(page: Page, user_id: str) -> list:
-        if not _wants_jobs(page):
-            return []
-        return await run_in_threadpool(_jobs.list_job_posts, user_id)
-
     def _result_page(
         request: Request, page: Page, output: object, job_post_id: str | None = None
     ) -> Response:
@@ -367,6 +365,15 @@ def create_app(
         if page is None:
             raise HTTPException(status_code=404)
         jpid = request.query_params.get("job_post_id")
+        # A writer page is always entered from a Job post. A bare visit has
+        # nothing to work from — send it to the list to pick one. (`?example=`
+        # keeps the offline demo path.)
+        if (
+            _job_post_driven(page)
+            and not jpid
+            and not request.query_params.get("example")
+        ):
+            return RedirectResponse("/jobs", status_code=303)
         job_post = (
             await run_in_threadpool(_jobs.get_job_post, jpid, uid) if jpid else None
         )
@@ -386,15 +393,13 @@ def create_app(
                     page=page, sections=sections, meta=meta, job_post_id=jpid,
                 )
         prefill = dict(page.example_form) if request.query_params.get("example") else {}
-        # A link from a saved job post can preselect the "Load a saved job
-        # post" picker (?job_post_id=…) and pre-fill any field that derives
-        # from the post (Company / Role title, via `Field.from_job_post`).
-        # A foreign / unknown id resolves to no `job_post` — nothing
-        # preselected past the raw picker value, nothing prefilled — and
-        # build_input already ignores an id it can't resolve for this user.
-        picker = next((f.name for f in page.fields if f.widget == "picker"), None)
-        if picker and jpid:
-            prefill[picker] = jpid
+        # The job post drives the form: its id rides along in a hidden field,
+        # and any field marked `from_job_post` (Company / Role title) is
+        # pre-filled from it. A foreign / unknown id resolves to no
+        # `job_post` — nothing carried, nothing prefilled — and build_input
+        # already ignores an id it can't resolve for this user.
+        if jpid:
+            prefill["job_post_id"] = jpid
         if job_post is not None:
             for f in page.fields:
                 if f.from_job_post:
@@ -404,7 +409,7 @@ def create_app(
         return render(
             "page.html", request,
             page=page, values=prefill, errors={},
-            documents=await _doc_choices(page, uid), jobs=await _job_choices(page, uid),
+            documents=await _doc_choices(page, uid),
         )
 
     @app.post("/p/{slug}", response_class=HTMLResponse)
@@ -430,7 +435,7 @@ def create_app(
             return render(
                 "page.html", request, status_code=422,
                 page=page, values=form, errors=exc.errors,
-                documents=await _doc_choices(page, uid), jobs=await _job_choices(page, uid),
+                documents=await _doc_choices(page, uid),
             )
         if app.state.stub_runs:
             # No capability call, so nothing real to save.

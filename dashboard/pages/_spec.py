@@ -30,10 +30,11 @@ from dataclasses import dataclass
 #   "lines"     - multi-line box; each non-blank line is one list item
 #   "checklist"  - one checkbox per saved document; the submitted value is
 #                  a list of document ids (read with FormReader.multi)
-#   "picker"     - a <select> of saved Job posts; the submitted value is one
-#                  job-post id (read with FormReader.text). "" means none.
 #   "doc_picker" - a <select> of saved documents; the submitted value is one
 #                  document id (read with FormReader.text). "" means none.
+#   "hidden"     - an <input type="hidden">, no label or wrapper. Its value
+#                  comes from the URL / a prior submission, not the user —
+#                  e.g. `job_post_id`, carried from `?job_post_id=<id>`.
 Widget = str
 
 

@@ -9,6 +9,10 @@
 
   <form method="post" action="/p/{{ page.slug }}">
     {% for f in page.fields %}
+    {% if f.widget == "hidden" %}
+    <input type="hidden" name="{{ f.name }}" value="{{ values.get(f.name, "") }}">
+    {% if f.name in errors %}<p class="error">{{ errors[f.name] }}</p>{% endif %}
+    {% else %}
     <div class="field{% if f.name in errors %} field--error{% endif %}">
       <label for="{{ f.name }}">
         {{ f.label }}{% if f.required %} <span class="req" title="required">*</span>{% endif %}
@@ -37,16 +41,6 @@
         {% else %}
         <p class="help">No saved documents yet — <a href="/documents">add one</a>.</p>
         {% endif %}
-      {% elif f.widget == "picker" %}
-        <select id="{{ f.name }}" name="{{ f.name }}">
-          <option value="">— none —</option>
-          {% for job in jobs %}
-          <option value="{{ job.id }}" {% if values.get(f.name) == job.id %}selected{% endif %}>{{ job.title }}</option>
-          {% endfor %}
-        </select>
-        {% if not jobs %}
-        <p class="help">No saved job posts yet — <a href="/jobs">add and analyse one</a>.</p>
-        {% endif %}
       {% elif f.widget == "doc_picker" %}
         <select id="{{ f.name }}" name="{{ f.name }}">
           <option value="">— none —</option>
@@ -65,6 +59,7 @@
       {% endif %}
       {% if f.name in errors %}<p class="error">{{ errors[f.name] }}</p>{% endif %}
     </div>
+    {% endif %}
     {% endfor %}
     <button type="submit">Run</button>
     {% if page.slow %}

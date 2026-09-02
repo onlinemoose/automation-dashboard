@@ -190,14 +190,6 @@ def test_another_users_job_post_is_404_over_http() -> None:
     assert still is not None and still.title == "Alpha role"
 
 
-def test_picker_only_lists_the_callers_jobs() -> None:
-    _jobs.create_job_post("Alpha role", POSTING, "user-a")
-    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
-    body = b.get("/p/cover-letter-writer").text
-    assert 'name="job_post_id"' in body
-    assert "Alpha role" not in body
-
-
 def test_another_users_job_id_cannot_be_smuggled_into_a_run(monkeypatch) -> None:
     """Picking a foreign id falls through to the form's own job_posting
     rather than loading that user's saved posting."""
@@ -271,18 +263,30 @@ def test_analysed_row_links_to_the_writer_pages_for_that_job(client: TestClient)
     assert body.index("cover-letter-writer?job_post_id") < body.index(f"/jobs/{job.id}/delete")
 
 
-def test_writer_page_preselects_a_job_from_the_query(client: TestClient) -> None:
+def test_writer_page_carries_the_job_id_in_a_hidden_field(client: TestClient) -> None:
     job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     body = client.get(f"/p/cover-letter-writer?job_post_id={job.id}").text
-    assert f'value="{job.id}" selected' in body
+    # no dropdown for the job post — the id rides along hidden, and the
+    # job's label isn't shown anywhere on the form
+    assert '<select id="job_post_id"' not in body
+    assert f'type="hidden" name="job_post_id" value="{job.id}"' in body
+    assert "Acme — Product Lead" not in body
+
+
+def test_writer_page_bare_visit_redirects_to_jobs(client: TestClient) -> None:
+    for slug in ("cover-letter-writer", "cv-writer"):
+        resp = client.get(f"/p/{slug}", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/jobs"
 
 
 def test_writer_page_ignores_a_foreign_job_in_the_query() -> None:
     foreign = _jobs.create_job_post("Alpha role", POSTING, "user-a")
     b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
     body = b.get(f"/p/cover-letter-writer?job_post_id={foreign.id}").text
-    assert "selected" not in body  # not offered, so nothing preselected
+    # the id is present but resolves to nothing — no leak of the foreign job
     assert "Alpha role" not in body
+    assert POSTING not in body
 
 
 def test_new_job_form_renders(client: TestClient) -> None:
@@ -577,24 +581,20 @@ def test_emphasis_items_to_text_is_read_back_by_the_writer_parse() -> None:
 # --- wiring into a writer page ------------------------------------------
 
 
-def test_picker_appears_on_the_writer_page(client: TestClient) -> None:
-    _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
-    body = client.get("/p/cover-letter-writer").text
-    assert 'name="job_post_id"' in body
-    assert "Acme — Product Lead" in body
-
-
 def test_writer_pages_drop_the_fields_the_job_post_supplies(client: TestClient) -> None:
-    # The picked job post carries the posting and the emphasis list, so
-    # neither has its own box on the writer form any more.
+    # The job post carries the posting and the emphasis list, so neither has
+    # its own box on the writer form; `job_post_id` rides along hidden.
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     for slug in ("cover-letter-writer", "cv-writer"):
-        body = client.get(f"/p/{slug}").text
-        assert 'name="job_post_id"' in body  # the picker stays
+        body = client.get(f"/p/{slug}?job_post_id={job.id}").text
+        assert 'name="job_post_id"' in body
         assert 'name="job_posting"' not in body
         assert 'name="emphasis"' not in body
 
 
-def test_writer_run_requires_a_picked_job_post(client: TestClient) -> None:
+def test_writer_run_without_a_job_post_is_rejected(client: TestClient) -> None:
+    # A POST with no resolvable job post can't build an Input — 422 with the
+    # message (surfaced even though the field is hidden now).
     resp = client.post(
         "/p/cover-letter-writer",
         data={"cv": "my cv text", "job_post_id": "", "emphasis": ""},
@@ -667,8 +667,9 @@ def test_writer_page_prefill_ignores_a_foreign_job() -> None:
 def test_writer_form_gains_no_new_fields(client: TestClient) -> None:
     """The prefill reuses the existing inputs — the writer form's rendered
     field set is exactly what the page declares, nothing added."""
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     for mod in (cover_letter_writer, cv_writer):
-        body = client.get(f"/p/{mod.PAGE.slug}").text
+        body = client.get(f"/p/{mod.PAGE.slug}?job_post_id={job.id}").text
         rendered = set(
             re.findall(r'<(?:input|select|textarea)\b[^>]*\bname="([^"]+)"', body)
         )
@@ -736,7 +737,8 @@ def test_rerun_query_forces_the_form_past_a_saved_result(client: TestClient) -> 
     body = client.get(f"/p/cover-letter-writer?job_post_id={job.id}&rerun=1").text
     assert 'action="/p/cover-letter-writer"' in body  # the form is shown
     assert "the saved letter body" not in body
-    assert f'value="{job.id}" selected' in body  # ...with the job kept in the picker
+    # ...with the job kept in the hidden field
+    assert f'name="job_post_id" value="{job.id}"' in body
 
 
 def test_writer_page_shows_the_form_when_the_job_has_no_saved_result(
@@ -745,7 +747,7 @@ def test_writer_page_shows_the_form_when_the_job_has_no_saved_result(
     job = _analysed_job()  # analysed, but this writer has never run for it
     body = client.get(f"/p/cv-writer?job_post_id={job.id}").text
     assert 'action="/p/cv-writer"' in body
-    assert f'value="{job.id}" selected' in body
+    assert f'name="job_post_id" value="{job.id}"' in body
 
 
 def test_the_saved_result_is_per_job_and_per_writer(client: TestClient) -> None:
@@ -756,10 +758,10 @@ def test_the_saved_result_is_per_job_and_per_writer(client: TestClient) -> None:
     assert 'action="/p/cv-writer"' in client.get(
         f"/p/cv-writer?job_post_id={job.id}"
     ).text
-    # and with no job post at all it's always the form
-    assert 'action="/p/cover-letter-writer"' in client.get(
-        "/p/cover-letter-writer"
-    ).text
+    # and with no job post at all, the writer redirects to the job list
+    assert client.get(
+        "/p/cover-letter-writer", follow_redirects=False
+    ).status_code == 303
 
 
 def test_a_finished_run_is_saved_against_its_job_post(monkeypatch) -> None:

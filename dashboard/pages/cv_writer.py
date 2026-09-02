@@ -30,11 +30,12 @@ _EXAMPLES = Path(__file__).parent / "_examples" / "cv_writer"
 
 FIELDS = (
     Field(
+        # Not a picker any more: this page is always opened from a Job post
+        # (`/p/cv-writer?job_post_id=<id>`, the icons on /jobs), so the id
+        # just rides along hidden. A bare visit redirects to /jobs.
         "job_post_id",
-        "Load a saved job post",
-        widget="picker",
-        help="Pick the analysed, annotated posting to write against, from your "
-        "list under Job posts. It supplies the posting and its emphasis list.",
+        "Job post",
+        widget="hidden",
     ),
     Field(
         "cv_document_id",

@@ -21,23 +21,33 @@ aren't retyped every run. Two-repo change.
   both alongside the emphasis on **every** analyse (refreshed, not
   Save-gated like the summary) — `""` when the model finds nothing.
 - **Prefill**: new `Field.from_job_post` names a `JobPost` attribute.
-  `page_form` resolves `?job_post_id=<id>` once and, after the picker
-  preselect, fills any `from_job_post` field from the job post. The writer
-  pages set it on their existing `job_title` (`"job_title"`) and
-  `job_company` (`"company"`) inputs — no new fields, no JS. Server-side,
-  URL-param only: picking from the dropdown without a page load does not
-  pre-fill. Foreign / unknown id → nothing filled. `build_input`
-  unchanged — the submitted field is the source of truth, so a cleared
-  field reaches the capability as `None`.
+  `page_form` resolves `?job_post_id=<id>` once and fills any
+  `from_job_post` field from the job post. The writer pages set it on
+  their existing `job_title` (`"job_title"`) and `job_company`
+  (`"company"`) inputs — no new fields, no JS. Server-side, on the GET
+  that renders the form. Foreign / unknown id → nothing filled.
+  `build_input` unchanged — the submitted field is the source of truth, so
+  a cleared field reaches the capability as `None`.
+- **The "Load a saved job post" dropdown is gone.** It added nothing
+  (the entry point is the shortcut icons on `/jobs`) and was a desync
+  trap: with no JS, changing it left the previous job's Company / Title
+  pre-filled. `job_post_id` is now a `"hidden"` field (new widget in
+  `page.html` / `_spec.py`) carried from `?job_post_id=`. A bare
+  `/p/<writer>` has no job to work from → `page_form` redirects to
+  `/jobs`. `_wants_jobs` / `_job_choices` deleted (nothing lists jobs
+  now); a `FormError` on the hidden field surfaces inline.
 - Not touched: no Company / Job Title field on the Job Post screens (fix
-  in the writer form); no dropdown-change JS; `docs/JOB_POSTS.md` "release
-  pin" paragraph corrected (it wrongly claimed an untagged local path).
+  in the writer form); `docs/JOB_POSTS.md` "release pin" paragraph
+  corrected (it wrongly claimed an untagged local path).
 - **Supabase migration** (run once): `alter table job_posts add column if
   not exists company text not null default '';` and `… job_title …`.
-- Tests in `tests/test_jobs.py`: analyse persists + re-analyse refreshes
-  both; `update_job_post` partial-merge for the two columns; writer pages
-  pre-fill from `?job_post_id=` (and empty when the job has none, and
-  ignore a foreign id); the writer form's rendered field set is unchanged.
+- Tests: analyse persists + re-analyse refreshes both; `update_job_post`
+  partial-merge for the two columns; writer pages pre-fill from
+  `?job_post_id=` (empty when the job has none, ignore a foreign id);
+  `job_post_id` rides in a hidden field; a bare writer visit is a 303 to
+  `/jobs`; the rendered field set is unchanged. `test_pages.py` /
+  `test_documents.py` GETs on writer pages now pass `?example=1` (which
+  reaches the form on every page).
 
 ## 2026-09-02 — Result view: trim the secondary section's chrome
 

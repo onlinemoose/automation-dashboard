@@ -34,7 +34,9 @@ def test_index_shows_the_copilot_entry(client: TestClient) -> None:
 
 @pytest.mark.parametrize("page", PAGES, ids=PAGE_IDS)
 def test_form_renders_every_declared_field(client: TestClient, page) -> None:
-    body = client.get(f"/p/{page.slug}").text
+    # `?example=1` reaches the form on every page — a job-post-driven page
+    # (a hidden `job_post_id` field) redirects a bare visit to /jobs.
+    body = client.get(f"/p/{page.slug}?example=1").text
     for field in page.fields:
         assert f'name="{field.name}"' in body, f"{page.slug}: field {field.name!r} not rendered"
 

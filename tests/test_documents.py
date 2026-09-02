@@ -96,7 +96,7 @@ def test_another_users_document_is_404_over_http() -> None:
 def test_checklist_only_lists_the_callers_docs() -> None:
     _documents.create_document("Alpha bio", "Private.", "user-a")
     b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
-    body = b.get("/p/cover-letter-writer").text
+    body = b.get("/p/cover-letter-writer?example=1").text
     assert 'name="background_document_ids"' in body
     assert "Alpha bio" not in body
 
@@ -198,7 +198,7 @@ def test_documents_area_requires_auth() -> None:
 
 def test_checklist_appears_on_the_writer_page(client: TestClient) -> None:
     _documents.create_document("Bio", "Ten years shipping data tools.", USER)
-    body = client.get("/p/cover-letter-writer").text
+    body = client.get("/p/cover-letter-writer?example=1").text
     assert 'name="background_document_ids"' in body
     assert "Bio" in body
 
@@ -234,7 +234,7 @@ def test_ticked_documents_reach_the_capability_input(monkeypatch) -> None:
 def test_cv_picker_replaces_the_cv_textarea_on_both_writer_pages(client: TestClient) -> None:
     _documents.create_document("My CV", "Priya Nair — infra engineer.", USER)
     for slug in ("cover-letter-writer", "cv-writer"):
-        body = client.get(f"/p/{slug}").text
+        body = client.get(f"/p/{slug}?example=1").text
         assert 'name="cv_document_id"' in body  # the picker
         assert "My CV" in body  # listing the caller's documents
         assert 'name="cv"' not in body  # the free-text box is gone

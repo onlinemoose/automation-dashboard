@@ -27,13 +27,15 @@ picked id into `job_posting` text and an `emphasis` list.
    emphasis *and* the summary together). **Re-analyse posting** replaces
    both (it asks first). A hand-typed / unparseable emphasis falls back to
    a plain textarea.
-4. On **Cover Letter Writer** / **CV Writer**, pick the job in **Load a
-   saved job post** — the only way in now. It supplies both `job_posting`
-   and the annotated `emphasis` list from the store (the writer pages have
-   no box for either; edit the emphasis on the job post itself). Pick a
-   CV document, then Run. From the **Job posts** list, an analysed row
-   carries shortcut icons straight to each writer with that job
-   preselected (`/p/<writer>?job_post_id=<id>`).
+4. Open **Cover Letter Writer** / **CV Writer** from an analysed row's
+   shortcut icon (`/p/<writer>?job_post_id=<id>`) — that is the only way
+   in. The job post drives the form: it supplies `job_posting` and the
+   annotated `emphasis` list from the store (the writer pages have no box
+   for either; edit the emphasis on the job post itself), and its `company`
+   / `job_title` pre-fill those fields. The `job_post_id` rides along in a
+   hidden field — there is no dropdown. Pick a CV document, then Run. A
+   bare visit to `/p/<writer>` (no `?job_post_id=`) has no job to work
+   from and redirects to `/jobs`.
 5. The finished letter / CV is **saved on the job post**. Coming back to
    that writer for the same job (`/p/<writer>?job_post_id=<id>`, including
    the list shortcut icons) shows the saved result in place of the form.
@@ -42,9 +44,11 @@ picked id into `job_posting` text and an `emphasis` list.
 
 On the **Job posts** list each row has an actions cell on the right:
 a delete icon always; once the post is analysed, a Cover Letter and a CV
-icon appear to its left, each linking to that writer with this job
-preselected (`page_form` honours `?job_post_id=`; a foreign / unknown id
-just preselects nothing).
+icon appear to its left, each linking to that writer for this job
+(`/p/<writer>?job_post_id=<id>`). Those links are the writer pages' only
+entry point — `page_form` redirects a bare `/p/<writer>` to `/jobs`; a
+foreign / unknown id resolves to no job post (nothing carried, nothing
+pre-filled), and the run then fails the same way a missing id does.
 
 ## Saved writer results
 
@@ -96,7 +100,7 @@ emphasis list is not).
 | Store (the only module that talks to Supabase) | `dashboard/_jobs.py` |
 | Analysis step + emphasis format/parse | `dashboard/_job_analysis.py` |
 | Screens | `/jobs*` routes in `dashboard/app.py`, `templates/jobs.html`, `templates/job_form.html`, `templates/job_detail.html` |
-| The picker on a writer page | `"picker"` widget in `dashboard/pages/_spec.py` + `templates/page.html` |
+| The job on a writer page | hidden `job_post_id` field (`"hidden"` widget) carried from `?job_post_id=`; bare-visit redirect in `page_form` |
 | Wiring into the contract | `build_input` in `dashboard/pages/cover_letter_writer.py` and `cv_writer.py` |
 
 `/jobs`, `/jobs/new`, `/jobs/{job_id}`, `/jobs/{job_id}/analyse`,
@@ -167,9 +171,9 @@ before committing.
 ## Prefilling the writer forms
 
 The **Cover Letter Writer** / **CV Writer** pages have plain, editable
-`job_title` and `job_company` text inputs. When either page is opened with
-`?job_post_id=<id>` in the URL (the shortcut icons on the Job posts list
-produce exactly that), `page_form` reads the job post and pre-fills those
+`job_title` and `job_company` text inputs. The page is always opened with
+`?job_post_id=<id>` in the URL (the shortcut icons on the Job posts list —
+the only entry point); `page_form` reads the job post and pre-fills those
 inputs from `job_post.job_title` / `job_post.company` — declared per field
 with `Field(..., from_job_post="job_title")` / `from_job_post="company"`
 (app-storage plumbing, like `job_post_id` itself, not a contract argument).
@@ -178,10 +182,11 @@ with `Field(..., from_job_post="job_title")` / `from_job_post="company"`
   clears them in the form, and `build_input` reads the submitted field —
   the job post is never a submit-time fallback, so a cleared field reaches
   the capability as `None`.
-- **URL param only, no JavaScript.** Picking a job from the writer-page
-  dropdown without a page load does not pre-fill (there is no `<script>`
-  on that page). Use the list shortcut icons, which carry the id.
-- A foreign / unknown id resolves to no job post → nothing pre-filled.
+- **Server-side, no JavaScript.** The pre-fill happens on the `GET` that
+  renders the form. There is no dropdown to re-pick a job (the
+  `job_post_id` is a hidden field), so nothing can desync.
+- A foreign / unknown id resolves to no job post → nothing pre-filled;
+  the bare `/p/<writer>` (no id) redirects to `/jobs`.
 
 ## The emphasis format
 
@@ -220,7 +225,7 @@ losslessly for the canonical format above.
 ## `job_post_id` is not a contract argument
 
 Like `background_document_ids`, the `Field("job_post_id", …,
-widget="picker")` carries an app-storage key, not a capability `Input`
+widget="hidden")` carries an app-storage key, not a capability `Input`
 argument. `build_input` is where it becomes contract data (`job_posting`
 text + a parsed `emphasis` list). It's the second deliberate exception to
 "a `Field.name` matches an `Input` argument".
