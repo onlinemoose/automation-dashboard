@@ -724,13 +724,16 @@ def create_app(
                 notice="The analysis came back empty — nothing was changed. Try again.",
             )
         text = _job_analysis.requirements_to_emphasis_text(analysis)
-        # `company` / `job_title` are refreshed on every analyse (like the
-        # emphasis list) — `""` when the posting doesn't state them. They
-        # pre-fill the writer forms; the user corrects there, per run.
+        # Analyse persists everything it produces — emphasis, summary, and
+        # `company` / `job_title` — so returning to the job post shows the
+        # analysis without needing a Save. All are refreshed on every
+        # analyse, `""` when the posting doesn't state them. `company` /
+        # `job_title` pre-fill the writer forms; the user corrects there.
         updated = await run_in_threadpool(
             lambda: _jobs.update_job_post(
                 job_id, uid,
                 emphasis=text,
+                summary=analysis.summary,
                 company=analysis.company,
                 job_title=analysis.job_title,
             )

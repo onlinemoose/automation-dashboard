@@ -426,15 +426,17 @@ def test_save_persists_annotations(client: TestClient) -> None:
     assert _jobs.get_job_post(job.id, USER).emphasis == annotated
 
 
-def test_analyse_response_shows_the_summary_and_carries_it_for_saving(
+def test_analyse_persists_the_summary_and_shows_it(
     client: TestClient,
 ) -> None:
     job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     body = client.post(f"/jobs/{job.id}/analyse").text
     assert 'class="markdown"' in body  # the summary is rendered for reading
     assert 'name="summary"' in body  # ...and sits in the save form as a hidden field
-    # analyse itself does not persist the summary — Save does
-    assert _jobs.get_job_post(job.id, USER).summary == ""
+    # analyse persists the summary immediately, like the emphasis list
+    assert _jobs.get_job_post(job.id, USER).summary.startswith(
+        "This employer is hiring for"
+    )
 
 
 def test_save_persists_the_summary_alongside_the_emphasis(client: TestClient) -> None:
