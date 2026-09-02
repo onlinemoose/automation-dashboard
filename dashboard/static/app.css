@@ -33,7 +33,8 @@ body {
   padding: 0.9rem 1.25rem;
   border-bottom: 1px solid var(--line);
 }
-.brand { font-weight: 600; text-decoration: none; color: var(--ink); }
+.brand { font-weight: 600; text-decoration: none; color: var(--ink); display: inline-flex; align-items: center; gap: 0.5rem; }
+.brand__mark { display: block; border-radius: 5px; }
 .topbar nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
 .topbar nav a + a { margin-left: 1rem; }
 .topbar nav a:hover { color: var(--ink); }
