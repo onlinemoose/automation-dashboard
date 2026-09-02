@@ -15,21 +15,56 @@ BANNED_FRAMEWORKS = {"prefect", "dagster", "airflow", "celery"}
 
 APP_PY = DASHBOARD / "app.py"
 PAGES_DIR = DASHBOARD / "pages"
-# The only routes app.py is allowed to declare. Every capability rides the
-# two generic `/p/{slug}` routes — a new page is a `Page` spec, not a route.
-# The `/documents` and `/jobs` sets are app-native (the dashboard's own stores,
-# CLAUDE.md rule 6), not per-capability — the same category as a future
-# `/usage` page.
-ALLOWED_ROUTES = {
-    "/health", "/login", "/logout", "/", "/p/{slug}",
-    "/documents", "/documents/new", "/documents/{doc_id}", "/documents/{doc_id}/delete",
-    "/jobs", "/jobs/new", "/jobs/{job_id}", "/jobs/{job_id}/analyse", "/jobs/{job_id}/delete",
-    # Working drafts — the app's own store (docs/DRAFTS.md), app-native like
-    # /documents and /jobs, not a per-capability page.
-    "/drafts", "/drafts/{draft_id}", "/drafts/{draft_id}/revise",
-    "/drafts/{draft_id}/accept", "/drafts/{draft_id}/undo", "/drafts/{draft_id}/edit",
-    "/drafts/{draft_id}/download",
+
+# --- area manifest -------------------------------------------------------
+# The dashboard hosts self-contained *product areas* that share only the
+# shell (CLAUDE.md "## Areas", docs/AREAS.md). This map is the single
+# source of truth for the boundary; it lives here so it never ships in the
+# runtime. Each area owns a set of `dashboard.*` modules (exact names or
+# package prefixes) and the routes it declares in app.py.
+
+SHELL_MODULES = {
+    "dashboard",  # dashboard/__init__.py + dashboard/__main__.py
+    "dashboard.app", "dashboard._auth", "dashboard._render",
+    "dashboard.hashpw", "dashboard.pages", "dashboard.pages._spec",
 }
+# The composition roots wire the areas into the shell — the page registry
+# lists each area's pages, app.py mounts each area's routes. They may
+# import area modules; nothing imports them back, and no area imports
+# another.
+COMPOSITION_ROOTS = {"dashboard.app", "dashboard.pages"}
+
+# The shell's own routes. Every capability still rides the two generic
+# `/p/{slug}` routes — a new page is a `Page` spec, not a route.
+SHELL_ROUTES = {"/health", "/login", "/logout", "/", "/p/{slug}"}
+
+AREAS = {
+    # Job Application Co-Pilot — the incumbent. Stays flat under
+    # `dashboard/` for now; the guardrail below isolates it. See
+    # docs/AREAS.md for the eventual move under `dashboard/areas/`.
+    "job_application": {
+        "modules": {
+            "dashboard._documents", "dashboard._jobs", "dashboard._drafts",
+            "dashboard._job_analysis", "dashboard._targeted_edit",
+            "dashboard.pages.cover_letter_writer", "dashboard.pages.cv_writer",
+        },
+        "routes": {
+            "/documents", "/documents/new",
+            "/documents/{doc_id}", "/documents/{doc_id}/delete",
+            "/jobs", "/jobs/new", "/jobs/{job_id}",
+            "/jobs/{job_id}/analyse", "/jobs/{job_id}/delete",
+            "/drafts", "/drafts/{draft_id}", "/drafts/{draft_id}/revise",
+            "/drafts/{draft_id}/accept", "/drafts/{draft_id}/undo",
+            "/drafts/{draft_id}/edit", "/drafts/{draft_id}/download",
+        },
+    },
+    # "event_research": {"modules": {"dashboard.areas.event_research"},
+    #                    "routes": {...}},  # added when it lands
+}
+
+# The only routes app.py may declare: the shell's plus every area's.
+ALLOWED_ROUTES = SHELL_ROUTES | {r for a in AREAS.values() for r in a["routes"]}
+
 ROUTE_DECORATORS = {"get", "post", "put", "patch", "delete", "head", "options", "route", "api_route"}
 
 
@@ -51,6 +86,30 @@ def _page_modules():
     """The per-capability page files — everything in `dashboard/pages/`
     except the shared spec and the registry."""
     return [p for p in sorted(PAGES_DIR.glob("*.py")) if p.name not in {"__init__.py", "_spec.py"}]
+
+
+def _module_name(path: pathlib.Path) -> str:
+    """Dotted import name for a file under the repo root:
+    `dashboard/pages/cv_writer.py` -> `dashboard.pages.cv_writer`,
+    `dashboard/pages/__init__.py` -> `dashboard.pages`."""
+    parts = list(path.relative_to(DASHBOARD.parent).with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
+
+
+def _owner(module: str) -> str | None:
+    """Which bucket a `dashboard.*` module belongs to — an area name,
+    "shell", or None when the manifest doesn't claim it. Longest matching
+    prefix wins, so `dashboard.pages.cv_writer` resolves to its area, not
+    to the shell's `dashboard.pages`."""
+    best, best_len = None, -1
+    buckets = {"shell": SHELL_MODULES, **{a: v["modules"] for a, v in AREAS.items()}}
+    for name, entries in buckets.items():
+        for entry in entries:
+            if (module == entry or module.startswith(entry + ".")) and len(entry) > best_len:
+                best, best_len = name, len(entry)
+    return best
 
 
 def test_no_reaching_past_a_capability_front_door() -> None:
@@ -139,6 +198,83 @@ def test_app_adds_no_per_capability_route_or_branch() -> None:
                     break
 
     assert not offenders, "app.py has drifted from generic routing:\n  " + "\n  ".join(offenders)
+
+
+def test_every_dashboard_module_is_claimed_by_the_manifest() -> None:
+    """Every `.py` under `dashboard/` is shell or belongs to exactly one
+    area — so a new area file can't be added without a manifest entry
+    saying which area owns it (and the cross-import check below can't be
+    dodged by staying unlisted)."""
+    unclaimed = [
+        str(p.relative_to(DASHBOARD.parent))
+        for p in _source_files()
+        if _owner(_module_name(p)) is None
+    ]
+    assert not unclaimed, (
+        "not claimed by the area manifest in tests/test_guardrails.py:\n  "
+        + "\n  ".join(unclaimed)
+    )
+
+
+def test_areas_do_not_cross_import() -> None:
+    """The area-granularity twin of `test_no_page_imports_another_page`.
+    An area's files import only their own area, the shell, and capability
+    front doors. Shell files import no area — except the composition roots
+    (`dashboard.app`, `dashboard.pages`), which mount the areas."""
+    offenders: list[str] = []
+    for path in _source_files():
+        mod = _module_name(path)
+        owner = _owner(mod)
+        for imported, names, lineno in _imports(path):
+            if imported.split(".")[0] != "dashboard":
+                continue
+            # `from dashboard import _jobs` names a submodule, not an attr —
+            # weigh `dashboard._jobs` too, not just `dashboard`.
+            candidates = [imported, *(f"{imported}.{n}" for n in names)]
+            targets = {t for c in candidates if (t := _owner(c)) not in (None, "shell")}
+            for target in targets:
+                if target == owner:
+                    continue
+                if owner == "shell" and mod in COMPOSITION_ROOTS:
+                    continue
+                rel = path.relative_to(DASHBOARD.parent)
+                whose = f"the {owner} area" if owner and owner != "shell" else "the shell"
+                offenders.append(
+                    f"{rel}:{lineno}: {whose} imports into the {target} area"
+                )
+    assert not offenders, "an area reaching into another area:\n  " + "\n  ".join(offenders)
+
+
+def test_every_route_belongs_to_shell_or_one_area() -> None:
+    """`ALLOWED_ROUTES` is the shell's routes plus each area's, kept
+    disjoint — so an Event Research route can't be added to app.py without
+    declaring which area's set it joins."""
+    seen: dict[str, str] = {}
+    for area, spec in AREAS.items():
+        for route in spec["routes"]:
+            assert route not in SHELL_ROUTES, f"{route} is both a shell route and {area}'s"
+            assert route not in seen, f"{route} is claimed by both {seen[route]} and {area}"
+            seen[route] = area
+
+    tree = ast.parse(APP_PY.read_text(), filename=str(APP_PY))
+    declared = {
+        deco.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for deco in node.decorator_list
+        if isinstance(deco, ast.Call)
+        and isinstance(deco.func, ast.Attribute)
+        and isinstance(deco.func.value, ast.Name)
+        and deco.func.value.id == "app"
+        and deco.func.attr in ROUTE_DECORATORS
+        and deco.args
+        and isinstance(deco.args[0], ast.Constant)
+        and isinstance(deco.args[0].value, str)
+    }
+    unclaimed = declared - SHELL_ROUTES - set(seen)
+    assert not unclaimed, (
+        "routes in app.py claimed by no area:\n  " + "\n  ".join(sorted(unclaimed))
+    )
 
 
 def test_every_page_is_registered_and_well_formed() -> None:
