@@ -367,14 +367,18 @@ def create_app(
         if page is None:
             raise HTTPException(status_code=404)
         jpid = request.query_params.get("job_post_id")
+        job_post = (
+            await run_in_threadpool(_jobs.get_job_post, jpid, uid) if jpid else None
+        )
         # If this writer has already run against the picked job post, show
         # that saved result instead of a blank form. `?rerun=1` (the "Run
         # again" button) skips this and opens the form with the job kept.
-        if page.saved_result_slot and jpid and "rerun" not in request.query_params:
-            job_post = await run_in_threadpool(_jobs.get_job_post, jpid, uid)
-            view = _saved_result(
-                getattr(job_post, page.saved_result_slot, None) if job_post else None
-            )
+        if (
+            page.saved_result_slot
+            and job_post is not None
+            and "rerun" not in request.query_params
+        ):
+            view = _saved_result(getattr(job_post, page.saved_result_slot, None))
             if view is not None:
                 sections, meta = view
                 return render(
@@ -383,12 +387,20 @@ def create_app(
                 )
         prefill = dict(page.example_form) if request.query_params.get("example") else {}
         # A link from a saved job post can preselect the "Load a saved job
-        # post" picker (?job_post_id=…). A foreign / unknown id simply won't
-        # match any option, and build_input already ignores one it can't
-        # resolve for this user.
+        # post" picker (?job_post_id=…) and pre-fill any field that derives
+        # from the post (Company / Role title, via `Field.from_job_post`).
+        # A foreign / unknown id resolves to no `job_post` — nothing
+        # preselected past the raw picker value, nothing prefilled — and
+        # build_input already ignores an id it can't resolve for this user.
         picker = next((f.name for f in page.fields if f.widget == "picker"), None)
         if picker and jpid:
             prefill[picker] = jpid
+        if job_post is not None:
+            for f in page.fields:
+                if f.from_job_post:
+                    value = getattr(job_post, f.from_job_post, "")
+                    if value:
+                        prefill[f.name] = value
         return render(
             "page.html", request,
             page=page, values=prefill, errors={},
@@ -650,8 +662,16 @@ def create_app(
                 notice="The analysis came back empty — nothing was changed. Try again.",
             )
         text = _job_analysis.requirements_to_emphasis_text(analysis)
+        # `company` / `job_title` are refreshed on every analyse (like the
+        # emphasis list) — `""` when the posting doesn't state them. They
+        # pre-fill the writer forms; the user corrects there, per run.
         updated = await run_in_threadpool(
-            lambda: _jobs.update_job_post(job_id, uid, emphasis=text)
+            lambda: _jobs.update_job_post(
+                job_id, uid,
+                emphasis=text,
+                company=analysis.company,
+                job_title=analysis.job_title,
+            )
         )
         cost = analysis.cost
         meta = RunMeta(

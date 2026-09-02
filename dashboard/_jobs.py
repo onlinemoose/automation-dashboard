@@ -50,6 +50,8 @@ class JobPost:
     posting: str  # the raw job posting text
     emphasis: str  # the annotated emphasis list (">" quote / "-" note format); "" until analysed
     summary: str = ""  # the analysis summary (Markdown); "" until analysed and saved
+    company: str = ""  # hiring company, as the analysis read it from the posting; "" until analysed
+    job_title: str = ""  # role title, as the analysis read it from the posting; "" until analysed
     # Saved writer results, keyed by the page's `saved_result_slot`. `None`
     # until that writer runs against this post; a dict of {sections, meta,
     # saved_at} once it has. App-owned display data, never capability input.
@@ -81,6 +83,8 @@ class _Backend(Protocol):
         posting: str | None = None,
         emphasis: str | None = None,
         summary: str | None = None,
+        company: str | None = None,
+        job_title: str | None = None,
         cover_letter: dict | None = None,
         tailored_cv: dict | None = None,
     ) -> JobPost | None: ...
@@ -131,6 +135,8 @@ class _MemoryBackend:
         posting: str | None = None,
         emphasis: str | None = None,
         summary: str | None = None,
+        company: str | None = None,
+        job_title: str | None = None,
         cover_letter: dict | None = None,
         tailored_cv: dict | None = None,
     ) -> JobPost | None:
@@ -146,6 +152,8 @@ class _MemoryBackend:
                 posting=current.posting if posting is None else posting,
                 emphasis=current.emphasis if emphasis is None else emphasis,
                 summary=current.summary if summary is None else summary,
+                company=current.company if company is None else company,
+                job_title=current.job_title if job_title is None else job_title,
                 cover_letter=current.cover_letter if cover_letter is None else cover_letter,
                 tailored_cv=current.tailored_cv if tailored_cv is None else tailored_cv,
                 updated_at=datetime.now(timezone.utc),
@@ -178,6 +186,8 @@ class _SupabaseBackend:
             posting=row.get("posting") or "",
             emphasis=row.get("emphasis") or "",
             summary=row.get("summary") or "",
+            company=row.get("company") or "",
+            job_title=row.get("job_title") or "",
             cover_letter=_as_result(row.get("cover_letter")),
             tailored_cv=_as_result(row.get("tailored_cv")),
             updated_at=_parse_ts(row.get("updated_at")),
@@ -217,6 +227,8 @@ class _SupabaseBackend:
         posting: str | None = None,
         emphasis: str | None = None,
         summary: str | None = None,
+        company: str | None = None,
+        job_title: str | None = None,
         cover_letter: dict | None = None,
         tailored_cv: dict | None = None,
     ) -> JobPost | None:
@@ -229,6 +241,10 @@ class _SupabaseBackend:
             payload["emphasis"] = emphasis
         if summary is not None:
             payload["summary"] = summary
+        if company is not None:
+            payload["company"] = company
+        if job_title is not None:
+            payload["job_title"] = job_title
         if cover_letter is not None:
             payload["cover_letter"] = cover_letter
         if tailored_cv is not None:
@@ -307,6 +323,8 @@ def update_job_post(
     posting: str | None = None,
     emphasis: str | None = None,
     summary: str | None = None,
+    company: str | None = None,
+    job_title: str | None = None,
     cover_letter: dict | None = None,
     tailored_cv: dict | None = None,
 ) -> JobPost | None:
@@ -317,6 +335,8 @@ def update_job_post(
         posting=posting,
         emphasis=emphasis,
         summary=summary,
+        company=company,
+        job_title=job_title,
         cover_letter=cover_letter,
         tailored_cv=tailored_cv,
     )

@@ -48,12 +48,14 @@ FIELDS = (
         "job_title",
         "Role title",
         widget="text",
+        from_job_post="job_title",
         help="Optional. Only if it isn't obvious from the posting.",
     ),
     Field(
         "job_company",
         "Company",
         widget="text",
+        from_job_post="company",
         help="Optional. Only if it isn't obvious from the posting.",
     ),
     Field(

@@ -50,5 +50,5 @@ addopts = "-q"
 [tool.uv.sources]
 cover-letter-writer = { git = "https://github.com/onlinemoose/cover-letter-writer.git", rev = "v0.13.0" }
 cv-writer = { git = "https://github.com/onlinemoose/cv-writer.git", rev = "v0.5.0" }
-job-analyst = { git = "https://github.com/onlinemoose/job-analyst.git", rev = "v0.1.0" }
+job-analyst = { git = "https://github.com/onlinemoose/job-analyst.git", rev = "v0.2.0" }
 targeted-editor = { git = "https://github.com/onlinemoose/targeted-editor.git", rev = "v0.1.0" }

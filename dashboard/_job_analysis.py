@@ -54,6 +54,8 @@ class Requirement:
 class Analysis:
     requirements: list[Requirement] = field(default_factory=list)
     summary: str = ""
+    company: str = ""  # hiring company, as written in the posting; "" if unstated
+    job_title: str = ""  # role title, as written in the posting; "" if unstated
     cost: Cost = field(default_factory=Cost)
 
 
@@ -133,6 +135,8 @@ def _to_analysis(output: job_analyst.Output) -> Analysis:
     return Analysis(
         requirements=reqs,
         summary=summary,
+        company=output.company,
+        job_title=output.job_title,
         cost=Cost(
             usd=c.usd,
             input_tokens=c.input_tokens,

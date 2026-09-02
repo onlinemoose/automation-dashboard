@@ -3,6 +3,42 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-02 — Analyse extracts Company + Job Title; writer forms pre-fill
+
+Branch `job-post-company-title`. When a job posting is analysed, the
+hiring **company** and **role title** are pulled out and stored on the job
+post, then pre-filled into the Cover Letter / CV writer forms so they
+aren't retyped every run. Two-repo change.
+
+- **`job-analyst` → v0.2.0** (sibling repo, its own tag): `Output` gains
+  `company: str` and `job_title: str` — copied from the posting as
+  written, `""` when unstated. The same `record_analysis` tool call
+  records them (both in its `required` list). Minor bump.
+- **Dashboard**: `pyproject.toml` re-pins `job-analyst` to `v0.2.0`
+  (`uv lock`). `_job_analysis.Analysis` and `_jobs.JobPost` each gain
+  `company` / `job_title` string fields (same pattern as `summary`);
+  `update_job_post(..., company=…, job_title=…)`. `job_analyse` persists
+  both alongside the emphasis on **every** analyse (refreshed, not
+  Save-gated like the summary) — `""` when the model finds nothing.
+- **Prefill**: new `Field.from_job_post` names a `JobPost` attribute.
+  `page_form` resolves `?job_post_id=<id>` once and, after the picker
+  preselect, fills any `from_job_post` field from the job post. The writer
+  pages set it on their existing `job_title` (`"job_title"`) and
+  `job_company` (`"company"`) inputs — no new fields, no JS. Server-side,
+  URL-param only: picking from the dropdown without a page load does not
+  pre-fill. Foreign / unknown id → nothing filled. `build_input`
+  unchanged — the submitted field is the source of truth, so a cleared
+  field reaches the capability as `None`.
+- Not touched: no Company / Job Title field on the Job Post screens (fix
+  in the writer form); no dropdown-change JS; `docs/JOB_POSTS.md` "release
+  pin" paragraph corrected (it wrongly claimed an untagged local path).
+- **Supabase migration** (run once): `alter table job_posts add column if
+  not exists company text not null default '';` and `… job_title …`.
+- Tests in `tests/test_jobs.py`: analyse persists + re-analyse refreshes
+  both; `update_job_post` partial-merge for the two columns; writer pages
+  pre-fill from `?job_post_id=` (and empty when the job has none, and
+  ignore a foreign id); the writer form's rendered field set is unchanged.
+
 ## 2026-09-02 — Result view: trim the secondary section's chrome
 
 Branch `new-user-flow`. On the Cover Letter / CV result view the header

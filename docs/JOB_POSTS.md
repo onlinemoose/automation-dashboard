@@ -136,7 +136,8 @@ Input(posting: str, role_hint: str | None = None, count: int = 12,
 Requirement(point: str, quote: str, importance: str, rationale: str)
     # importance: "critical" | "high" | "medium" | "low"
 
-Output(requirements, summary, reading_between_the_lines: list[str], cost)
+Output(requirements, summary, company: str, job_title: str,
+       reading_between_the_lines: list[str], cost)
 ```
 
 - **importance** `critical → must-have`, `high`/`medium → strong`,
@@ -144,17 +145,43 @@ Output(requirements, summary, reading_between_the_lines: list[str], cost)
 - **`reading_between_the_lines`** is appended to `Analysis.summary` as a
   `**Reading between the lines**` bullet list (the summary is rendered
   through the Markdown filter on the job detail page).
+- **`company`** / **`job_title`** (job-analyst ≥ v0.2.0) — the hiring
+  company and role title as written in the posting, `""` when the posting
+  omits them. `job_analyse` persists them to the `job_posts.company` /
+  `job_posts.job_title` columns on every analyse (refreshed like the
+  emphasis list). They pre-fill the writer forms — see *Prefilling the
+  writer forms* below.
 - **`quote`** is already verified verbatim against the posting by the
   capability; the dashboard passes it straight through to `Emphasis.quote`.
 - **`cost`** maps field-for-field onto the `RunMeta` footer.
 
-### Local dev / release pin
+### Release pin
 
-`job-analyst` isn't tagged yet, so `pyproject.toml` overrides it to a path:
-`job-analyst = { path = "../job-analyst", editable = true }` (a sibling
-checkout). Once it cuts a release, swap that for
-`{ git = "https://github.com/onlinemoose/job-analyst.git", rev = "vX.Y.Z" }`,
-`uv lock`, and add a `docs/PROGRESS.md` entry.
+`pyproject.toml` pins `job-analyst` to a git tag in `[tool.uv.sources]`:
+`job-analyst = { git = "https://github.com/onlinemoose/job-analyst.git", rev = "vX.Y.Z" }`.
+Upgrading = bump the `rev`, `uv lock`, add a `docs/PROGRESS.md` entry. For
+local dev against an unreleased change, point it at a sibling checkout
+(`{ path = "../job-analyst", editable = true }`) and switch back to the tag
+before committing.
+
+## Prefilling the writer forms
+
+The **Cover Letter Writer** / **CV Writer** pages have plain, editable
+`job_title` and `job_company` text inputs. When either page is opened with
+`?job_post_id=<id>` in the URL (the shortcut icons on the Job posts list
+produce exactly that), `page_form` reads the job post and pre-fills those
+inputs from `job_post.job_title` / `job_post.company` — declared per field
+with `Field(..., from_job_post="job_title")` / `from_job_post="company"`
+(app-storage plumbing, like `job_post_id` itself, not a contract argument).
+
+- The values are a **starting point, not a lock**: the user edits or
+  clears them in the form, and `build_input` reads the submitted field —
+  the job post is never a submit-time fallback, so a cleared field reaches
+  the capability as `None`.
+- **URL param only, no JavaScript.** Picking a job from the writer-page
+  dropdown without a page load does not pre-fill (there is no `<script>`
+  on that page). Use the list shortcut icons, which carry the id.
+- A foreign / unknown id resolves to no job post → nothing pre-filled.
 
 ## The emphasis format
 
@@ -211,6 +238,8 @@ create table job_posts (
   posting      text not null,
   emphasis     text not null default '',
   summary      text not null default '',
+  company      text not null default '',
+  job_title    text not null default '',
   cover_letter jsonb,
   tailored_cv  jsonb,
   updated_at   timestamptz not null default now(),
@@ -232,6 +261,11 @@ alter table job_posts add column if not exists summary text not null default '';
 -- the saved writer-result slots (Cover Letter / CV re-shown per job post)
 alter table job_posts add column if not exists cover_letter jsonb;
 alter table job_posts add column if not exists tailored_cv  jsonb;
+
+-- company / job title, extracted by analyse (job-analyst >= v0.2.0),
+-- used to pre-fill the writer forms
+alter table job_posts add column if not exists company   text not null default '';
+alter table job_posts add column if not exists job_title text not null default '';
 ```
 
 Adding a `text` column with a constant default, or a nullable `jsonb`
@@ -254,6 +288,10 @@ for local dev and tests; set the vars for anything real.
   form field; **Save** writes emphasis and summary together. A `summary`
   column on `job_posts` holds it (see the migration under *Backing
   store*). It is read-only in the UI.
+- **`company` / `job_title` are persisted by Analyse** (unlike the
+  summary), refreshed on every analyse, `""` when the posting omits them.
+  They have no field on the Job Post screens — correction happens in the
+  writer form they pre-fill. See *Prefilling the writer forms*.
 - **The posting is only editable before the first analysis.** After that
   the detail screen shows it read-only; changing it means deleting the
   post and re-adding it.
@@ -265,7 +303,7 @@ for local dev and tests; set the vars for anything real.
   required argument (`list_job_posts(user_id)`,
   `get_job_post(job_id, user_id)`, `create_job_post(title, posting, user_id)`,
   `update_job_post(job_id, user_id, *, title=…, posting=…, emphasis=…,
-  summary=…, cover_letter=…, tailored_cv=…)`,
+  summary=…, company=…, job_title=…, cover_letter=…, tailored_cv=…)`,
   `delete_job_post(job_id, user_id)`). Another user's post is invisible:
   absent from the list and the picker, `None` from `get`, a no-op to update
   or delete, and a 404 over HTTP. See `USER_SCOPING.md` and

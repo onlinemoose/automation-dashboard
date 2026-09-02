@@ -11,13 +11,15 @@ page's `run`.
 
 from __future__ import annotations
 
+import re
+
 import job_analyst
 import pytest
 from starlette.testclient import TestClient
 
 from dashboard import _job_analysis, _jobs
 from dashboard.app import create_app
-from dashboard.pages import cover_letter_writer
+from dashboard.pages import cover_letter_writer, cv_writer
 
 POSTING = "Product Lead at Acme\nOwn the roadmap. Work with cross-functional stakeholders."
 
@@ -55,6 +57,8 @@ def stub_analyst(monkeypatch):
                 ),
             ],
             summary=f"This employer is hiring for {first[:120]!r}.",
+            company="Acme",
+            job_title="Product Lead",
             reading_between_the_lines=["The seniority bar is higher than the title suggests."],
             cost=job_analyst.Cost(
                 usd=0.0,
@@ -99,6 +103,14 @@ def test_store_crud_roundtrip() -> None:
     assert again.summary == "## Analysis\nThe key theme is roadmap ownership."
     assert "strong here" in again.emphasis
     assert again.posting == POSTING
+
+    # partial update: company / job_title only, everything else untouched
+    assert (again.company, again.job_title) == ("", "")
+    _jobs.update_job_post(a.id, USER, company="Acme Corp", job_title="Product Lead")
+    again = _jobs.get_job_post(a.id, USER)
+    assert (again.company, again.job_title) == ("Acme Corp", "Product Lead")
+    assert again.summary == "## Analysis\nThe key theme is roadmap ownership."
+    assert "strong here" in again.emphasis
 
     _jobs.delete_job_post(a.id, USER)
     assert _jobs.get_job_post(a.id, USER) is None
@@ -337,6 +349,44 @@ def test_analyse_fills_the_emphasis_list(client: TestClient) -> None:
     assert "\n- " in stored  # empty note slots for the candidate
 
 
+def test_analyse_persists_company_and_job_title(client: TestClient) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    assert (job.company, job.job_title) == ("", "")
+
+    assert client.post(f"/jobs/{job.id}/analyse").status_code == 200
+    again = _jobs.get_job_post(job.id, USER)
+    assert again.company == "Acme"  # from the stub_analyst fixture
+    assert again.job_title == "Product Lead"
+
+
+def test_re_analyse_refreshes_company_and_job_title(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    client.post(f"/jobs/{job.id}/analyse")
+
+    def other_run(data: job_analyst.Input) -> job_analyst.Output:
+        return job_analyst.Output(
+            requirements=[
+                job_analyst.Requirement(
+                    point="p", quote="", importance="high", rationale="r"
+                )
+            ],
+            summary="s",
+            company="Northwind Robotics",
+            job_title="Staff Engineer",
+            reading_between_the_lines=[],
+            cost=job_analyst.Cost(0.0, 0, 0, 0, 0),
+        )
+
+    monkeypatch.setattr(job_analyst, "run", other_run)
+    client.post(f"/jobs/{job.id}/analyse")
+
+    again = _jobs.get_job_post(job.id, USER)
+    assert again.company == "Northwind Robotics"
+    assert again.job_title == "Staff Engineer"
+
+
 def test_analyse_empty_result_keeps_the_emphasis_and_warns(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -345,7 +395,8 @@ def test_analyse_empty_result_keeps_the_emphasis_and_warns(
 
     def empty_run(data: job_analyst.Input) -> job_analyst.Output:
         return job_analyst.Output(
-            requirements=[], summary="", reading_between_the_lines=[],
+            requirements=[], summary="", company="", job_title="",
+            reading_between_the_lines=[],
             cost=job_analyst.Cost(0.0, 0, 0, 0, 0),
         )
 
@@ -582,6 +633,47 @@ def test_picked_job_post_reaches_the_capability_input(monkeypatch) -> None:
     assert len(data.emphasis) == 1
     assert data.emphasis[0].quote == "Own the roadmap"
     assert "Candidate note: strong, did this at Bract" in data.emphasis[0].point
+
+
+# --- Company / Role title prefill from the job post -------------------------
+
+
+def test_writer_page_prefills_company_and_title_from_the_job(client: TestClient) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    _jobs.update_job_post(job.id, USER, company="Acme Corp", job_title="Product Lead")
+
+    for slug in ("cover-letter-writer", "cv-writer"):
+        body = client.get(f"/p/{slug}?job_post_id={job.id}").text
+        assert 'name="job_company"' in body and 'value="Acme Corp"' in body
+        assert 'name="job_title"' in body and 'value="Product Lead"' in body
+
+
+def test_writer_page_prefill_is_empty_when_the_job_has_none(client: TestClient) -> None:
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)  # never analysed
+    body = client.get(f"/p/cover-letter-writer?job_post_id={job.id}").text
+    # both inputs render, both empty
+    assert 'id="job_company"' in body and 'id="job_title"' in body
+    assert 'value="Acme Corp"' not in body
+
+
+def test_writer_page_prefill_ignores_a_foreign_job() -> None:
+    foreign = _jobs.create_job_post("Alpha role", POSTING, "user-a")
+    _jobs.update_job_post(foreign.id, "user-a", company="Acme Corp", job_title="Product Lead")
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+    body = b.get(f"/p/cover-letter-writer?job_post_id={foreign.id}").text
+    assert "Acme Corp" not in body and "Product Lead" not in body
+
+
+def test_writer_form_gains_no_new_fields(client: TestClient) -> None:
+    """The prefill reuses the existing inputs — the writer form's rendered
+    field set is exactly what the page declares, nothing added."""
+    for mod in (cover_letter_writer, cv_writer):
+        body = client.get(f"/p/{mod.PAGE.slug}").text
+        rendered = set(
+            re.findall(r'<(?:input|select|textarea)\b[^>]*\bname="([^"]+)"', body)
+        )
+        declared = {f.name for f in mod.PAGE.fields}
+        assert rendered == declared
 
 
 # --- a saved result re-shows for its job post ---------------------------

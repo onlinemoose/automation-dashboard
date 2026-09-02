@@ -85,7 +85,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "itsdangerous", specifier = ">=2.2" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "job-analyst", git = "https://github.com/onlinemoose/job-analyst.git?rev=v0.1.0" },
+    { name = "job-analyst", git = "https://github.com/onlinemoose/job-analyst.git?rev=v0.2.0" },
     { name = "markdown", specifier = ">=3.7" },
     { name = "markupsafe", specifier = ">=2.1" },
     { name = "python-multipart", specifier = ">=0.0.9" },
@@ -667,8 +667,8 @@ wheels = [
 
 [[package]]
 name = "job-analyst"
-version = "0.1.1"
-source = { git = "https://github.com/onlinemoose/job-analyst.git?rev=v0.1.0#b2e88c389de1d87207a7efecfd8b78261e1148a7" }
+version = "0.2.0"
+source = { git = "https://github.com/onlinemoose/job-analyst.git?rev=v0.2.0#a24048cedd7b2ec16bc9a259128a845f3483f8ae" }
 dependencies = [
     { name = "anthropic" },
 ]

@@ -57,6 +57,13 @@ class Field:
     required: bool = False
     help: str = ""
     placeholder: str = ""
+    # When the writer page is opened with `?job_post_id=<id>`, this field's
+    # value is pre-filled (server-side) from the named attribute of that
+    # `JobPost` — e.g. `from_job_post="company"`. The field stays a normal
+    # editable input; the value is a starting point, not a lock. Left None
+    # for fields that don't derive from a job post. Like `job_post_id`
+    # itself, this is app-storage plumbing, not part of the contract.
+    from_job_post: str | None = None
 
 
 @dataclass(frozen=True)

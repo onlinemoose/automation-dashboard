@@ -41,6 +41,14 @@ app-storage keys — the fields whose names deliberately don't match an
 `Input` argument; `build_input` folds the resolved text into the real
 contract field.
 
+A `Field` may also set `from_job_post="<JobPost attr>"`: when the page is
+opened with `?job_post_id=<id>`, `page_form` pre-fills that field
+server-side from the named attribute of the resolved job post (e.g. the
+writer pages' `job_title` / `job_company` from `job_post.job_title` /
+`job_post.company`). The field stays a normal editable input — the value
+is a starting point, and `build_input` still reads whatever was submitted.
+See `docs/JOB_POSTS.md`.
+
 `FormReader` (also in `_spec.py`) is a small helper for `build_input`: it
 reads fields, collects every problem, and raises one `FormError` with all
 of them so the form re-renders with each message next to its field.
