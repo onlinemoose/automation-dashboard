@@ -3,6 +3,32 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-02 — CVs are a distinct document kind
+
+Background documents now carry an `is_cv` flag. A CV is offered only in
+the "Load a saved CV" picker (`doc_picker`) on the Cover Letter / CV
+pages; a background note is offered only in the background-notes
+`checklist`. Neither kind bleeds into the other's widget any more.
+
+- **Store** (`_documents.py`): `Document` gains `is_cv: bool = False`.
+  `list_documents(user_id, *, is_cv=None)` filters by kind (`None` → both).
+  `create_document` / `update_document` take a trailing `is_cv=False` — a
+  plain attribute, not a scoping key, so it may default (unlike `user_id`).
+  Both backends (Supabase + in-memory fallback) updated.
+- **Form** (`document_form.html`): a "This document is a CV" checkbox.
+  `/documents/new` and `/documents/{id}` read `is_cv` from the form; the
+  checkbox round-trips on edit and on a validation re-render.
+- **Writer pages**: `_doc_choices` now returns `{"cv": [...],
+  "background": [...]}`; `page.html` feeds the `doc_picker` from
+  `documents.cv` and the `checklist` from `documents.background`. No page
+  spec changed — the split is entirely in the route + template.
+- **`/documents`**: lists "CVs" and "Background documents" under separate
+  headings (a `doc_rows` macro over each partition).
+- **Migration**: `docs/migrations/2026-09-02_cv_flag.sql` — additive. The
+  column is added `default true` (backfills every existing row, since the
+  store has only ever held CVs), then the default is flipped to `false`.
+  Run by hand in the Supabase SQL editor.
+
 ## 2026-09-02 — Analyse extracts Company + Job Title; writer forms pre-fill
 
 Branch `job-post-company-title`. When a job posting is analysed, the

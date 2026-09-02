@@ -2,9 +2,17 @@
 
 Reusable text the writer pages can pull in — your **CV**, a bio, project
 write-ups, company-context notes, answers to recurring application
-questions. Kept once, picked per run, instead of pasted every time. On
-the Cover Letter / CV pages one document is chosen as the CV
-(`doc_picker`), any others as background context (`checklist`).
+questions. Kept once, picked per run, instead of pasted every time.
+
+A document is one of two **kinds**, set by the `is_cv` flag (the "This
+document is a CV" box on the document form):
+
+- **CVs** (`is_cv = true`) — offered on the Cover Letter / CV pages in the
+  "Load a saved CV" picker (`doc_picker`), and nowhere else.
+- **Background notes** (`is_cv = false`, the default for a new document) —
+  offered as background context in the `checklist`, and nowhere else.
+
+`/documents` lists the two kinds under separate headings.
 
 This is **the app's own storage** (CLAUDE.md rule 6): private to the
 dashboard, no capability sees it. A page reads it only to turn a picked id
@@ -37,6 +45,7 @@ create table background_documents (
   id         uuid primary key default gen_random_uuid(),
   title      text not null,
   body       text not null default '',
+  is_cv      boolean not null default false,
   updated_at timestamptz not null default now(),
   user_id    uuid not null references auth.users(id) on delete cascade
 );
@@ -78,7 +87,7 @@ the vars before the deploy lands.
 
 1. The writer page declares a `Field("background_document_ids", …,
    widget="checklist")`. It renders as one unchecked checkbox per saved
-   document.
+   background note (`is_cv = false`); CVs are not listed here.
 2. On submit, `app.py` keeps the repeated values as a list (it no longer
    flattens the form) and runs `build_input` in a worker thread.
 3. `build_input` calls `FormReader.multi("background_document_ids")` for
@@ -95,18 +104,21 @@ matches an `Input` argument".
 ## Notes / limits
 
 - **Per-user scoped.** Every query filters on `user_id`, reads and writes
-  alike, and each public function takes the owning user's id as its last
-  required argument (`list_documents(user_id)`,
+  alike, and each public function takes the owning user's id as a required
+  argument (`list_documents(user_id, *, is_cv=None)`,
   `get_documents(ids, user_id)`, `get_document(doc_id, user_id)`,
-  `create_document(title, body, user_id)`,
-  `update_document(doc_id, title, body, user_id)`,
+  `create_document(title, body, user_id, is_cv=False)`,
+  `update_document(doc_id, title, body, user_id, is_cv=False)`,
   `delete_document(doc_id, user_id)`). Another user's document is invisible:
   absent from the list, `None` from `get`, a no-op to update or delete, and
   a 404 over HTTP. See `USER_SCOPING.md` and
   `migrations/2026-09-01_user_scoping.sql`.
-- **No per-tool scoping.** Every document you own is offered to both writer
-  pages. A `tags` / `tools` column can be added later without migrating
-  existing rows.
+- **CV vs background note** is the only per-tool distinction: the `is_cv`
+  flag decides which writer widget offers a document (`list_documents`
+  takes `is_cv=True` / `False` to filter). It was added by
+  `migrations/2026-09-02_cv_flag.sql` — additive, existing rows backfilled
+  to `true`. Any finer routing (a `tags` / `tools` column) can be added
+  later without migrating existing rows.
 - **Blocking client.** `supabase-py` is synchronous; every store call
   (including `build_input`) is wrapped in `run_in_threadpool`. Switch to
   the async client if that ever becomes a bottleneck.

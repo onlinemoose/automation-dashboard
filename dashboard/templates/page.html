@@ -32,9 +32,9 @@
       {% elif f.widget == "checklist" %}
         {% set selected = values.get(f.name, []) %}
         <input type="hidden" name="{{ f.name }}" value="">
-        {% if documents %}
+        {% if documents.background %}
         <ul class="checklist">
-          {% for doc in documents %}
+          {% for doc in documents.background %}
           <li><label>
             <input type="checkbox" name="{{ f.name }}" value="{{ doc.id }}"
                    {% if doc.id in selected %}checked{% endif %}>
@@ -43,17 +43,17 @@
           {% endfor %}
         </ul>
         {% else %}
-        <p class="help">No saved documents yet — <a href="/documents">add one</a>.</p>
+        <p class="help">No background documents yet — <a href="/documents">add one</a>.</p>
         {% endif %}
       {% elif f.widget == "doc_picker" %}
         <select id="{{ f.name }}" name="{{ f.name }}">
           <option value="">— none —</option>
-          {% for doc in documents %}
+          {% for doc in documents.cv %}
           <option value="{{ doc.id }}" {% if values.get(f.name) == doc.id %}selected{% endif %}>{{ doc.title }}</option>
           {% endfor %}
         </select>
-        {% if not documents %}
-        <p class="help">No saved documents yet — <a href="/documents">add one</a>.</p>
+        {% if not documents.cv %}
+        <p class="help">No saved CV yet — <a href="/documents">add one</a> and tick “This document is a CV”.</p>
         {% endif %}
       {% else %}
         <textarea id="{{ f.name }}" name="{{ f.name }}"

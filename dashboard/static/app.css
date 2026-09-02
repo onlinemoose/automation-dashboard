@@ -120,6 +120,8 @@ h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
 .checklist li { padding: 0.15rem 0; }
 .checklist label { display: flex; gap: 0.5rem; font-weight: 400; align-items: baseline; }
 .checklist input { width: auto; }
+.field--check label { display: flex; gap: 0.5rem; font-weight: 400; align-items: baseline; }
+.field--check input { width: auto; }
 .field--error input, .field--error textarea { border-color: var(--error); }
 .req { color: var(--error); }
 .error { color: var(--error); font-size: 0.9rem; margin: 0.3rem 0 0; }

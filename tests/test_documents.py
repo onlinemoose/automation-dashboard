@@ -51,6 +51,26 @@ def test_store_crud_roundtrip() -> None:
     assert [d.title for d in _documents.list_documents(USER)] == ["Portfolio"]
 
 
+def test_is_cv_flag_roundtrips_and_filters_the_listing() -> None:
+    cv = _documents.create_document("Priya CV", "cv body", USER, is_cv=True)
+    note = _documents.create_document("Portfolio", "project write-ups", USER)
+
+    assert _documents.get_document(cv.id, USER).is_cv is True
+    assert _documents.get_document(note.id, USER).is_cv is False  # the default
+
+    assert [d.title for d in _documents.list_documents(USER)] == ["Portfolio", "Priya CV"]
+    assert [d.title for d in _documents.list_documents(USER, is_cv=True)] == ["Priya CV"]
+    assert [d.title for d in _documents.list_documents(USER, is_cv=False)] == ["Portfolio"]
+
+    # The flag moves with an update.
+    _documents.update_document(note.id, "Portfolio", "project write-ups", USER, is_cv=True)
+    assert _documents.get_document(note.id, USER).is_cv is True
+    assert {d.title for d in _documents.list_documents(USER, is_cv=True)} == {
+        "Priya CV",
+        "Portfolio",
+    }
+
+
 def test_documents_are_scoped_to_the_user() -> None:
     """A row created by one user is invisible to another — not merely
     unlisted, but unreadable, unwritable and undeletable."""
@@ -146,6 +166,42 @@ def test_documents_delete_is_an_icon_button(client: TestClient) -> None:
 def test_new_document_form_renders(client: TestClient) -> None:
     body = client.get("/documents/new").text
     assert 'name="title"' in body and 'name="body"' in body
+    assert 'name="is_cv"' in body  # the "This document is a CV" toggle
+
+
+def test_new_document_defaults_to_a_background_note(client: TestClient) -> None:
+    client.post("/documents/new", data={"title": "Bio", "body": "x"}, follow_redirects=False)
+    assert _documents.list_documents(USER)[0].is_cv is False
+
+
+def test_a_new_document_can_be_marked_a_cv(client: TestClient) -> None:
+    client.post(
+        "/documents/new",
+        data={"title": "My CV", "body": "x", "is_cv": "on"},
+        follow_redirects=False,
+    )
+    assert _documents.list_documents(USER)[0].is_cv is True
+
+
+def test_editing_toggles_the_cv_flag(client: TestClient) -> None:
+    doc = _documents.create_document("My CV", "x", USER, is_cv=True)
+
+    edit_form = client.get(f"/documents/{doc.id}").text
+    assert 'name="is_cv"' in edit_form and "checked" in edit_form
+
+    # Submitting the form with the box unticked (the field is simply absent).
+    client.post(f"/documents/{doc.id}", data={"title": "My CV", "body": "x"},
+                follow_redirects=False)
+    assert _documents.get_document(doc.id, USER).is_cv is False
+
+
+def test_documents_list_groups_cvs_and_notes_under_separate_headings(client: TestClient) -> None:
+    _documents.create_document("Priya CV", "cv body", USER, is_cv=True)
+    _documents.create_document("Portfolio", "project notes", USER)
+    body = client.get("/documents").text
+    assert "<h2>CVs</h2>" in body and "<h2>Background documents</h2>" in body
+    assert body.index("<h2>CVs</h2>") < body.index("Priya CV") < body.index("<h2>Background documents</h2>")
+    assert body.index("<h2>Background documents</h2>") < body.index("Portfolio")
 
 
 def test_create_edit_delete_through_the_ui(client: TestClient) -> None:
@@ -232,16 +288,31 @@ def test_ticked_documents_reach_the_capability_input(monkeypatch) -> None:
 
 
 def test_cv_picker_replaces_the_cv_textarea_on_both_writer_pages(client: TestClient) -> None:
-    _documents.create_document("My CV", "Priya Nair — infra engineer.", USER)
+    _documents.create_document("My CV", "Priya Nair — infra engineer.", USER, is_cv=True)
     for slug in ("cover-letter-writer", "cv-writer"):
         body = client.get(f"/p/{slug}?example=1").text
         assert 'name="cv_document_id"' in body  # the picker
-        assert "My CV" in body  # listing the caller's documents
+        assert "My CV" in body  # listing the caller's CVs
         assert 'name="cv"' not in body  # the free-text box is gone
 
 
+def test_a_cv_is_offered_only_in_the_picker_and_a_note_only_in_the_checklist(
+    client: TestClient,
+) -> None:
+    _documents.create_document("Priya CV", "CV BODY", USER, is_cv=True)
+    _documents.create_document("Portfolio", "PROJECT NOTES", USER)  # a background note
+
+    for slug in ("cover-letter-writer", "cv-writer"):
+        body = client.get(f"/p/{slug}?example=1").text
+        # The checklist region begins at its hidden input; nothing that
+        # names a document title comes after it in these forms.
+        before, checklist = body.split('name="background_document_ids"', 1)
+        assert "Priya CV" in before and "Priya CV" not in checklist  # picker only
+        assert "Portfolio" in checklist and "Portfolio" not in before  # checklist only
+
+
 def test_picked_cv_document_reaches_the_capability(monkeypatch) -> None:
-    doc = _documents.create_document("My CV", "PRIYA NAIR CV BODY", USER)
+    doc = _documents.create_document("My CV", "PRIYA NAIR CV BODY", USER, is_cv=True)
 
     seen: dict[str, object] = {}
 

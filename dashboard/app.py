@@ -255,10 +255,16 @@ def create_app(
             return redirect
         return render("index.html", request)
 
-    async def _doc_choices(page: Page, user_id: str) -> list:
+    async def _doc_choices(page: Page, user_id: str) -> dict[str, list]:
+        """Saved documents for a writer page's widgets, split by kind: the
+        `doc_picker` offers the CVs, the `checklist` offers everything else."""
         if not _wants_documents(page):
-            return []
-        return await run_in_threadpool(_documents.list_documents, user_id)
+            return {"cv": [], "background": []}
+        docs = await run_in_threadpool(_documents.list_documents, user_id)
+        return {
+            "cv": [d for d in docs if d.is_cv],
+            "background": [d for d in docs if not d.is_cv],
+        }
 
     def _result_page(
         request: Request, page: Page, output: object, job_post_id: str | None = None
@@ -484,14 +490,15 @@ def create_app(
         form = await request.form()
         title = str(form.get("title") or "").strip()
         body = str(form.get("body") or "").strip()
+        is_cv = form.get("is_cv") is not None
         if not title:
             return render(
                 "document_form.html", request, status_code=422,
-                doc=None, values={"title": title, "body": body},
+                doc=None, values={"title": title, "body": body, "is_cv": is_cv},
                 errors={"title": "Title is required."},
             )
         uid = _auth.current_user_id(request)
-        await run_in_threadpool(_documents.create_document, title, body, uid)
+        await run_in_threadpool(_documents.create_document, title, body, uid, is_cv)
         return RedirectResponse("/documents", status_code=303)
 
     @app.get("/documents/{doc_id}", response_class=HTMLResponse)
@@ -504,7 +511,9 @@ def create_app(
             raise HTTPException(status_code=404)
         return render(
             "document_form.html", request,
-            doc=doc, values={"title": doc.title, "body": doc.body}, errors={},
+            doc=doc,
+            values={"title": doc.title, "body": doc.body, "is_cv": doc.is_cv},
+            errors={},
         )
 
     @app.post("/documents/{doc_id}", response_class=HTMLResponse)
@@ -515,15 +524,16 @@ def create_app(
         form = await request.form()
         title = str(form.get("title") or "").strip()
         body = str(form.get("body") or "").strip()
+        is_cv = form.get("is_cv") is not None
         if not title:
             doc = await run_in_threadpool(_documents.get_document, doc_id, uid)
             return render(
                 "document_form.html", request, status_code=422,
-                doc=doc, values={"title": title, "body": body},
+                doc=doc, values={"title": title, "body": body, "is_cv": is_cv},
                 errors={"title": "Title is required."},
             )
         updated = await run_in_threadpool(
-            _documents.update_document, doc_id, title, body, uid
+            _documents.update_document, doc_id, title, body, uid, is_cv
         )
         if updated is None:
             raise HTTPException(status_code=404)

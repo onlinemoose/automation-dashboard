@@ -38,6 +38,10 @@ class Document:
     title: str
     body: str
     updated_at: datetime | None = None
+    # A CV is a distinct kind of document: the writer pages offer it in the
+    # "Load a saved CV" picker and keep it out of the background-notes
+    # checklist. Everything else is a background note (`is_cv=False`).
+    is_cv: bool = False
     user_id: str = ""  # the Supabase auth.users id that owns this row
 
 
@@ -51,12 +55,12 @@ def _parse_ts(value: object) -> datetime | None:
 
 
 class _Backend(Protocol):
-    def list(self, user_id: str) -> list[Document]: ...
+    def list(self, user_id: str, *, is_cv: bool | None = None) -> list[Document]: ...
     def get_many(self, ids: Iterable[str], user_id: str) -> list[Document]: ...
     def get(self, doc_id: str, user_id: str) -> Document | None: ...
-    def create(self, title: str, body: str, user_id: str) -> Document: ...
+    def create(self, title: str, body: str, user_id: str, is_cv: bool) -> Document: ...
     def update(
-        self, doc_id: str, title: str, body: str, user_id: str
+        self, doc_id: str, title: str, body: str, user_id: str, is_cv: bool
     ) -> Document | None: ...
     def delete(self, doc_id: str, user_id: str) -> None: ...
 
@@ -73,8 +77,12 @@ class _MemoryBackend:
         self._seq = 0
         self._lock = threading.Lock()
 
-    def list(self, user_id: str) -> list[Document]:
-        mine = [d for d in self._docs.values() if d.user_id == user_id]
+    def list(self, user_id: str, *, is_cv: bool | None = None) -> list[Document]:
+        mine = [
+            d
+            for d in self._docs.values()
+            if d.user_id == user_id and (is_cv is None or d.is_cv == is_cv)
+        ]
         return sorted(mine, key=lambda d: d.title.lower())
 
     def get_many(self, ids: Iterable[str], user_id: str) -> list[Document]:
@@ -90,7 +98,7 @@ class _MemoryBackend:
         doc = self._docs.get(doc_id)
         return doc if doc is not None and doc.user_id == user_id else None
 
-    def create(self, title: str, body: str, user_id: str) -> Document:
+    def create(self, title: str, body: str, user_id: str, is_cv: bool) -> Document:
         with self._lock:
             self._seq += 1
             doc = Document(
@@ -98,12 +106,15 @@ class _MemoryBackend:
                 title=title,
                 body=body,
                 updated_at=datetime.now(timezone.utc),
+                is_cv=is_cv,
                 user_id=user_id,
             )
             self._docs[doc.id] = doc
             return doc
 
-    def update(self, doc_id: str, title: str, body: str, user_id: str) -> Document | None:
+    def update(
+        self, doc_id: str, title: str, body: str, user_id: str, is_cv: bool
+    ) -> Document | None:
         with self._lock:
             current = self._docs.get(doc_id)
             if current is None or current.user_id != user_id:
@@ -113,6 +124,7 @@ class _MemoryBackend:
                 title=title,
                 body=body,
                 updated_at=datetime.now(timezone.utc),
+                is_cv=is_cv,
                 user_id=current.user_id,  # the rebuilt row keeps its owner
             )
             self._docs[doc_id] = doc
@@ -141,11 +153,15 @@ class _SupabaseBackend:
             title=row.get("title") or "",
             body=row.get("body") or "",
             updated_at=_parse_ts(row.get("updated_at")),
+            is_cv=bool(row.get("is_cv")),
             user_id=row.get("user_id") or "",
         )
 
-    def list(self, user_id: str) -> list[Document]:
-        res = self._table().select("*").eq("user_id", user_id).order("title").execute()
+    def list(self, user_id: str, *, is_cv: bool | None = None) -> list[Document]:
+        query = self._table().select("*").eq("user_id", user_id)
+        if is_cv is not None:
+            query = query.eq("is_cv", is_cv)
+        res = query.order("title").execute()
         return [self._row(r) for r in (res.data or [])]
 
     def get_many(self, ids: Iterable[str], user_id: str) -> list[Document]:
@@ -174,18 +190,23 @@ class _SupabaseBackend:
         rows = res.data or []
         return self._row(rows[0]) if rows else None
 
-    def create(self, title: str, body: str, user_id: str) -> Document:
+    def create(self, title: str, body: str, user_id: str, is_cv: bool) -> Document:
         res = (
             self._table()
-            .insert({"title": title, "body": body, "user_id": user_id})
+            .insert(
+                {"title": title, "body": body, "user_id": user_id, "is_cv": is_cv}
+            )
             .execute()
         )
         return self._row((res.data or [{}])[0])
 
-    def update(self, doc_id: str, title: str, body: str, user_id: str) -> Document | None:
+    def update(
+        self, doc_id: str, title: str, body: str, user_id: str, is_cv: bool
+    ) -> Document | None:
         payload = {
             "title": title,
             "body": body,
+            "is_cv": is_cv,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         res = (
@@ -237,13 +258,17 @@ def reset() -> None:
 
 # --- public API: thin pass-throughs to the chosen backend ----------------
 #
-# Every one of these takes the owning user's id as its last required
-# argument, with no default — a missed call site is a loud TypeError at
-# import/collection time rather than a silent cross-user read.
+# Every one of these takes the owning user's id as a required argument,
+# with no default — a missed call site is a loud TypeError at
+# import/collection time rather than a silent cross-user read. The
+# trailing `is_cv` (a plain document attribute on create/update, a listing
+# filter on `list_documents`) is not a scoping key, so it may default.
 
 
-def list_documents(user_id: str) -> list[Document]:
-    return _store().list(user_id)
+def list_documents(user_id: str, *, is_cv: bool | None = None) -> list[Document]:
+    """The user's documents. `is_cv=True` → CVs only, `False` → background
+    notes only, `None` (default) → both."""
+    return _store().list(user_id, is_cv=is_cv)
 
 
 def get_documents(ids: Iterable[str], user_id: str) -> list[Document]:
@@ -254,12 +279,16 @@ def get_document(doc_id: str, user_id: str) -> Document | None:
     return _store().get(doc_id, user_id)
 
 
-def create_document(title: str, body: str, user_id: str) -> Document:
-    return _store().create(title, body, user_id)
+def create_document(
+    title: str, body: str, user_id: str, is_cv: bool = False
+) -> Document:
+    return _store().create(title, body, user_id, is_cv)
 
 
-def update_document(doc_id: str, title: str, body: str, user_id: str) -> Document | None:
-    return _store().update(doc_id, title, body, user_id)
+def update_document(
+    doc_id: str, title: str, body: str, user_id: str, is_cv: bool = False
+) -> Document | None:
+    return _store().update(doc_id, title, body, user_id, is_cv)
 
 
 def delete_document(doc_id: str, user_id: str) -> None:
