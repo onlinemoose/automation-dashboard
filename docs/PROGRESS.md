@@ -35,7 +35,10 @@ aren't retyped every run. Two-repo change.
   `page.html` / `_spec.py`) carried from `?job_post_id=`. A bare
   `/p/<writer>` has no job to work from → `page_form` redirects to
   `/jobs`. `_wants_jobs` / `_job_choices` deleted (nothing lists jobs
-  now); a `FormError` on the hidden field surfaces inline.
+  now); a `FormError` on the hidden field surfaces inline. The job post's
+  name shows as a plain `<h2>` below the page lede (`page.html` gets
+  `job_post`) for orientation now the dropdown label is gone; it survives
+  the 422 re-render too.
 - Not touched: no Company / Job Title field on the Job Post screens (fix
   in the writer form); `docs/JOB_POSTS.md` "release pin" paragraph
   corrected (it wrongly claimed an untagged local path).

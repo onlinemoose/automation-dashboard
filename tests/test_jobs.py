@@ -266,11 +266,13 @@ def test_analysed_row_links_to_the_writer_pages_for_that_job(client: TestClient)
 def test_writer_page_carries_the_job_id_in_a_hidden_field(client: TestClient) -> None:
     job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     body = client.get(f"/p/cover-letter-writer?job_post_id={job.id}").text
-    # no dropdown for the job post — the id rides along hidden, and the
-    # job's label isn't shown anywhere on the form
+    # no dropdown for the job post — the id rides along hidden
     assert '<select id="job_post_id"' not in body
     assert f'type="hidden" name="job_post_id" value="{job.id}"' in body
-    assert "Acme — Product Lead" not in body
+    # ...but the job name is shown (plain <h2>) so the user knows which
+    # post they're on
+    assert "<h2>Acme — Product Lead</h2>" in body
+    assert f'href="/jobs/{job.id}"' not in body  # not a link
 
 
 def test_writer_page_bare_visit_redirects_to_jobs(client: TestClient) -> None:
@@ -590,6 +592,19 @@ def test_writer_pages_drop_the_fields_the_job_post_supplies(client: TestClient) 
         assert 'name="job_post_id"' in body
         assert 'name="job_posting"' not in body
         assert 'name="emphasis"' not in body
+
+
+def test_writer_page_keeps_the_job_name_on_a_validation_error(client: TestClient) -> None:
+    # A run with the job but no CV document 422s back to the form — the job
+    # name must still orient the user.
+    job = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
+    resp = client.post(
+        f"/p/cover-letter-writer?job_post_id={job.id}",
+        data={"job_post_id": job.id, "cv_document_id": ""},
+    )
+    assert resp.status_code == 422
+    assert "Load a saved CV." in resp.text
+    assert "<h2>Acme — Product Lead</h2>" in resp.text
 
 
 def test_writer_run_without_a_job_post_is_rejected(client: TestClient) -> None:

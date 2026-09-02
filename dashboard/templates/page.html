@@ -5,6 +5,10 @@
   <h1>{{ page.title }}</h1>
   <p class="lede">{{ page.summary }}</p>
 
+  {% if job_post %}
+  <h2>{{ job_post.title }}</h2>
+  {% endif %}
+
   {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
 
   <form method="post" action="/p/{{ page.slug }}">

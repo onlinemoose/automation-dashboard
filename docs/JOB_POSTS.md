@@ -33,9 +33,10 @@ picked id into `job_posting` text and an `emphasis` list.
    annotated `emphasis` list from the store (the writer pages have no box
    for either; edit the emphasis on the job post itself), and its `company`
    / `job_title` pre-fill those fields. The `job_post_id` rides along in a
-   hidden field — there is no dropdown. Pick a CV document, then Run. A
-   bare visit to `/p/<writer>` (no `?job_post_id=`) has no job to work
-   from and redirects to `/jobs`.
+   hidden field — there is no dropdown — and the job's name shows as a
+   plain `<h2>` below the page lede so you know which post you're writing
+   against. Pick a CV document, then Run. A bare visit to `/p/<writer>`
+   (no `?job_post_id=`) has no job to work from and redirects to `/jobs`.
 5. The finished letter / CV is **saved on the job post**. Coming back to
    that writer for the same job (`/p/<writer>?job_post_id=<id>`, including
    the list shortcut icons) shows the saved result in place of the form.

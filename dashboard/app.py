@@ -408,7 +408,7 @@ def create_app(
                         prefill[f.name] = value
         return render(
             "page.html", request,
-            page=page, values=prefill, errors={},
+            page=page, values=prefill, errors={}, job_post=job_post,
             documents=await _doc_choices(page, uid),
         )
 
@@ -425,6 +425,11 @@ def create_app(
         # `background_document_ids` — never a capability `Input` field). A
         # finished run is saved against it, and `page_form` re-shows that.
         job_post_id = str(form.get("job_post_id") or "").strip() or None
+        job_post = (
+            await run_in_threadpool(_jobs.get_job_post, job_post_id, uid)
+            if job_post_id
+            else None
+        )
         try:
             # `build_input` may hit the Background documents store to resolve a
             # picked id — run it off the event loop like `run()` itself. It
@@ -434,7 +439,7 @@ def create_app(
         except FormError as exc:
             return render(
                 "page.html", request, status_code=422,
-                page=page, values=form, errors=exc.errors,
+                page=page, values=form, errors=exc.errors, job_post=job_post,
                 documents=await _doc_choices(page, uid),
             )
         if app.state.stub_runs:
