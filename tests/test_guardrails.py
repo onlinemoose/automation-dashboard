@@ -28,7 +28,7 @@ ALLOWED_ROUTES = {
     # /documents and /jobs, not a per-capability page.
     "/drafts", "/drafts/{draft_id}", "/drafts/{draft_id}/revise",
     "/drafts/{draft_id}/accept", "/drafts/{draft_id}/undo", "/drafts/{draft_id}/edit",
-    "/drafts/{draft_id}/download",
+    "/drafts/{draft_id}/download", "/drafts/{draft_id}/save",
 }
 ROUTE_DECORATORS = {"get", "post", "put", "patch", "delete", "head", "options", "route", "api_route"}
 

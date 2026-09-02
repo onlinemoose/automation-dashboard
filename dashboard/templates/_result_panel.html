@@ -17,6 +17,9 @@
         <input type="hidden" name="slug" value="{{ page.slug }}">
         <input type="hidden" name="section" value="{{ section.heading | lower | replace(' ', '-') }}">
         <input type="hidden" name="text" value="{{ section.markdown }}">
+        {# carried onto the draft so its editor can save the edit back to
+           this job post; empty for a result with no job post behind it #}
+        <input type="hidden" name="job_post_id" value="{{ job_post_id or '' }}">
         <button type="submit" class="button button--ghost">Edit draft</button>
       </form>
       {% endif %}

@@ -123,6 +123,11 @@ class Draft:
     created_at: datetime | None = None
     updated_at: datetime | None = None
     user_id: str = ""  # the Supabase auth.users id that owns this row
+    # The job post this result was written for, when there was one — set so
+    # the editor's "Save to job post" can write the edited text back into
+    # that post's result slot. "" for a draft opened from a result with no
+    # job post behind it. See docs/DRAFTS.md.
+    job_post_id: str = ""
 
 
 def replay(original: str, revisions: list[Revision]) -> str:
@@ -144,7 +149,7 @@ def _parse_ts(value: object) -> datetime | None:
 
 class _Backend(Protocol):
     def create_or_get(
-        self, slug: str, section: str, text: str, user_id: str
+        self, slug: str, section: str, text: str, user_id: str, job_post_id: str = ""
     ) -> Draft: ...
     def get(self, draft_id: str, user_id: str) -> Draft | None: ...
     def add_revision(
@@ -165,7 +170,11 @@ class _MemoryBackend:
         self._seq = 0
         self._lock = threading.Lock()
 
-    def create_or_get(self, slug: str, section: str, text: str, user_id: str) -> Draft:
+    def create_or_get(
+        self, slug: str, section: str, text: str, user_id: str, job_post_id: str = ""
+    ) -> Draft:
+        from dataclasses import replace
+
         digest = source_hash(text)
         with self._lock:
             for draft in self._drafts.values():
@@ -175,6 +184,15 @@ class _MemoryBackend:
                 if (draft.user_id, draft.slug, draft.section, draft.source_hash) == (
                     user_id, slug, section, digest,
                 ):
+                    # Backfill the job-post link for a draft opened before it
+                    # was recorded (or first opened outside a job post).
+                    if job_post_id and not draft.job_post_id:
+                        draft = replace(
+                            draft,
+                            job_post_id=job_post_id,
+                            updated_at=datetime.now(timezone.utc),
+                        )
+                        self._drafts[draft.id] = draft
                     return draft
             self._seq += 1
             now = datetime.now(timezone.utc)
@@ -189,6 +207,7 @@ class _MemoryBackend:
                 created_at=now,
                 updated_at=now,
                 user_id=user_id,
+                job_post_id=job_post_id,
             )
             self._drafts[draft.id] = draft
             return draft
@@ -250,9 +269,12 @@ class _SupabaseBackend:
             created_at=_parse_ts(row.get("created_at")),
             updated_at=_parse_ts(row.get("updated_at")),
             user_id=row.get("user_id") or "",
+            job_post_id=row.get("job_post_id") or "",
         )
 
-    def create_or_get(self, slug: str, section: str, text: str, user_id: str) -> Draft:
+    def create_or_get(
+        self, slug: str, section: str, text: str, user_id: str, job_post_id: str = ""
+    ) -> Draft:
         digest = source_hash(text)
         res = (
             self._table()
@@ -268,7 +290,20 @@ class _SupabaseBackend:
         )
         rows = res.data or []
         if rows:
-            return self._row(rows[0])
+            existing = self._row(rows[0])
+            # Backfill the job-post link for a row created before it was
+            # recorded (or first opened outside a job post).
+            if job_post_id and not existing.job_post_id:
+                upd = (
+                    self._table()
+                    .update({"job_post_id": job_post_id})
+                    .eq("id", existing.id)
+                    .eq("user_id", user_id)
+                    .execute()
+                )
+                bumped = upd.data or []
+                return self._row(bumped[0]) if bumped else existing
+            return existing
         res = (
             self._table()
             .insert(
@@ -280,6 +315,7 @@ class _SupabaseBackend:
                     "current": text,
                     "revisions": [],
                     "user_id": user_id,
+                    "job_post_id": job_post_id or None,
                 }
             )
             .execute()
@@ -387,8 +423,10 @@ def reset() -> None:
 # import/collection time rather than a silent cross-user read.
 
 
-def create_or_get_draft(slug: str, section: str, text: str, user_id: str) -> Draft:
-    return _store().create_or_get(slug, section, normalize(text), user_id)
+def create_or_get_draft(
+    slug: str, section: str, text: str, user_id: str, job_post_id: str = ""
+) -> Draft:
+    return _store().create_or_get(slug, section, normalize(text), user_id, job_post_id)
 
 
 def get_draft(draft_id: str, user_id: str) -> Draft | None:

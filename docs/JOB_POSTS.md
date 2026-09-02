@@ -69,6 +69,12 @@ button uses — bypasses this and shows the form with the job preselected.
 A slot is only ever written (overwritten by the next run), never cleared
 by the app; deleting the job post drops it with the row.
 
+The slot is also written by the working-draft editor: **Save to job post**
+(`POST /drafts/{id}/save`) patches one section's Markdown in the stored
+payload with the edited draft, keeping the cost meta and the other
+sections, then redirects here so the edit shows on the next visit. See
+`docs/DRAFTS.md`.
+
 `update_job_post(..., cover_letter=<dict>)` / `tailored_cv=<dict>` follow
 the same partial-merge rule as `emphasis` / `summary`: `None` means "leave
 this slot alone".
