@@ -25,6 +25,17 @@
 {{ draft.current }}</pre>
   <p class="error" id="draft-doc-error" hidden></p>
 
+  {% if draft.job_post_id %}
+  {# Write what's on screen back into this draft's job post, in place of
+     the "Download .md" round-trip. draft-edit.js flushes a pending manual
+     edit before the form submits, so the save always takes the current
+     text. #}
+  <form class="draft__save" method="post"
+        action="/drafts/{{ draft.id }}/save" id="draft-save-form">
+    <button type="submit" class="button">Save to job post</button>
+  </form>
+  {% endif %}
+
   <button type="button" class="draft__revise-btn" id="draft-revise-btn" hidden>Revise…</button>
 
   <div class="draft__work" id="draft-work" role="dialog" aria-labelledby="draft-work-title" hidden>

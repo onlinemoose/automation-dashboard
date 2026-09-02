@@ -56,6 +56,7 @@ AREAS = {
             "/drafts", "/drafts/{draft_id}", "/drafts/{draft_id}/revise",
             "/drafts/{draft_id}/accept", "/drafts/{draft_id}/undo",
             "/drafts/{draft_id}/edit", "/drafts/{draft_id}/download",
+            "/drafts/{draft_id}/save",
         },
     },
     # "event_research": {"modules": {"dashboard.areas.event_research"},

@@ -14,7 +14,7 @@ import pytest
 import targeted_editor
 from starlette.testclient import TestClient
 
-from dashboard import _drafts
+from dashboard import _drafts, _jobs
 from dashboard.app import create_app
 
 # Must match `create_app`'s default `as_user` — the id the app scopes by
@@ -29,8 +29,10 @@ TEXT = "The quick brown fox jumps over the lazy dog.\n\nA second paragraph follo
 @pytest.fixture(autouse=True)
 def fresh_store():
     _drafts.reset()
+    _jobs.reset()
     yield
     _drafts.reset()
+    _jobs.reset()
 
 
 @pytest.fixture(autouse=True)
@@ -109,6 +111,27 @@ def test_create_or_get_dedupes_on_slug_section_and_hash():
     e = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, "someone-else")
     assert e.id != a.id
     assert e.user_id == "someone-else"
+
+
+def test_create_or_get_stamps_and_backfills_the_job_post_link():
+    # first open, outside any job post
+    a = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    assert a.job_post_id == ""
+
+    # re-opening the same result from a job post backfills the link
+    # (same draft — job_post_id is not part of the dedupe key)
+    b = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER, "job-123")
+    assert b.id == a.id
+    assert b.job_post_id == "job-123"
+    assert _drafts.get_draft(a.id, USER).job_post_id == "job-123"
+
+    # an already-linked draft keeps its post — a later bare open can't clear it
+    c = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    assert c.id == a.id and c.job_post_id == "job-123"
+
+    # a fresh result created from a job post carries it from the start
+    d = _drafts.create_or_get_draft(SLUG, SECTION, TEXT + " more", USER, "job-999")
+    assert d.id != a.id and d.job_post_id == "job-999"
 
 
 def test_drafts_are_scoped_to_the_user():
@@ -429,10 +452,106 @@ def test_download_returns_the_current_markdown(client: TestClient):
     assert resp.text == TEXT.replace("fox", "FOX", 1)
 
 
+# --- save to job post ----------------------------------------------
+
+CL_ORIGINAL = "Dear hiring team,\n\nI am the original letter.\n\nRegards."
+
+
+def _job_with_saved_letter(user_id: str = USER):
+    """A job post carrying a saved cover-letter result, the way the writer
+    page leaves it after a run against that post."""
+    job = _jobs.create_job_post("Acme — Lead", "the posting text", user_id)
+    _jobs.update_job_post(
+        job.id, user_id,
+        cover_letter={
+            "sections": [
+                {"heading": "Cover letter", "markdown": CL_ORIGINAL, "editable": True},
+                {"heading": "What it targeted", "markdown": "a note", "editable": False},
+            ],
+            "meta": None,
+            "saved_at": "2026-09-02T00:00:00+00:00",
+        },
+    )
+    return job
+
+
+def test_open_draft_carries_the_job_post_id(client: TestClient):
+    resp = client.post(
+        "/drafts",
+        data={"slug": SLUG, "section": SECTION, "text": TEXT, "job_post_id": "job-7"},
+        follow_redirects=False,
+    )
+    draft_id = resp.headers["location"].removeprefix("/drafts/")
+    assert _drafts.get_draft(draft_id, USER).job_post_id == "job-7"
+    # the editor now offers "Save to job post"
+    body = client.get(f"/drafts/{draft_id}").text
+    assert f'action="/drafts/{draft_id}/save"' in body
+
+
+def test_no_save_button_without_a_job_post(client: TestClient):
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    assert 'id="draft-save-form"' not in client.get(f"/drafts/{draft.id}").text
+
+
+def test_save_writes_the_edit_into_the_job_post_slot_and_redirects(client: TestClient):
+    job = _job_with_saved_letter()
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, CL_ORIGINAL, USER, job.id)
+    _drafts.record_manual_edit(draft.id, USER, text="A rewritten cover letter body.")
+
+    resp = client.post(f"/drafts/{draft.id}/save", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/p/{SLUG}?job_post_id={job.id}"
+
+    saved = _jobs.get_job_post(job.id, USER).cover_letter
+    bodies = {s["heading"]: s["markdown"] for s in saved["sections"]}
+    assert bodies["Cover letter"] == "A rewritten cover letter body."
+    assert bodies["What it targeted"] == "a note"  # the read-only section is untouched
+
+
+def test_saved_edit_shows_on_the_writer_page(client: TestClient):
+    job = _job_with_saved_letter()
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, CL_ORIGINAL, USER, job.id)
+    _drafts.record_manual_edit(draft.id, USER, text="Edited letter that should now render.")
+    client.post(f"/drafts/{draft.id}/save", follow_redirects=False)
+
+    body = client.get(f"/p/{SLUG}?job_post_id={job.id}").text
+    assert "Edited letter that should now render." in body
+    assert "I am the original letter." not in body
+
+
+def test_save_builds_a_slot_when_the_job_post_has_no_saved_result(client: TestClient):
+    job = _jobs.create_job_post("Acme — Lead", "posting", USER)  # writer never ran
+    assert _jobs.get_job_post(job.id, USER).cover_letter is None
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, CL_ORIGINAL, USER, job.id)
+    _drafts.record_manual_edit(draft.id, USER, text="From an unrun job post.")
+
+    resp = client.post(f"/drafts/{draft.id}/save", follow_redirects=False)
+    assert resp.status_code == 303
+    saved = _jobs.get_job_post(job.id, USER).cover_letter
+    assert saved["sections"][0]["heading"] == "Cover letter"
+    assert saved["sections"][0]["markdown"] == "From an unrun job post."
+
+
+def test_save_on_a_draft_with_no_job_post_is_400(client: TestClient):
+    draft = _drafts.create_or_get_draft(SLUG, SECTION, TEXT, USER)
+    resp = client.post(f"/drafts/{draft.id}/save", follow_redirects=False)
+    assert resp.status_code == 400
+
+
+def test_save_of_a_foreign_draft_is_404():
+    job = _jobs.create_job_post("Acme", "posting", "user-a")
+    mine = _drafts.create_or_get_draft(SLUG, SECTION, CL_ORIGINAL, "user-a", job.id)
+    b = TestClient(create_app(auth_disabled=True, as_user="user-b"))
+    assert b.post(f"/drafts/{mine.id}/save", follow_redirects=False).status_code == 404
+    # user-a's job post is left as it was
+    assert _jobs.get_job_post(job.id, "user-a").cover_letter is None
+
+
 def test_unknown_draft_is_404(client: TestClient):
     assert client.get("/drafts/nope").status_code == 404
     assert client.post("/drafts/nope/undo").status_code == 404
     assert client.get("/drafts/nope/download").status_code == 404
+    assert client.post("/drafts/nope/save").status_code == 404
 
 
 def test_drafts_area_requires_auth():

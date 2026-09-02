@@ -55,6 +55,34 @@ Research lands**, so the shared `render`/`guard` shell surface is designed
 against a real second consumer. Orthogonal do-anytime cleanup noted in
 `docs/AREAS.md`: a `require_user` + `load_draft` `Depends` pass over
 `app.py`.
+## 2026-09-02 — Working drafts: save the edit back to the job post
+
+The draft editor could only **Download .md**; an edited Cover Letter / CV
+had no way back into the app. It now has **Save to job post**.
+
+- **Store** (`_drafts.py`): `Draft` gains a nullable `job_post_id`.
+  `create_or_get_draft(..., job_post_id="")` stamps it on create and
+  back-fills a blank one if the same result is later re-opened from a job
+  post. Not part of the `(user_id, slug, section, source_hash)` dedupe
+  key. Both backends updated.
+- **Entry point** (`_result_panel.html`): the "Edit draft" form carries
+  the current `job_post_id` onto `POST /drafts`.
+- **Route**: `POST /drafts/{id}/save` → `_draft_saved_into_slot` patches
+  one section's Markdown in the job post's `cover_letter` / `tailored_cv`
+  payload (cost meta and the other sections untouched, `saved_at` bumped;
+  builds a minimal one-section payload if the slot was empty), then
+  `303 → /p/{slug}?job_post_id=…`, which re-renders the saved result. 400
+  if the draft has no job post behind it.
+- **Editor** (`draft.html` + `draft-edit.js`): a "Save to job post"
+  button bottom-right under the `<pre>`, shown only when the draft is
+  linked. Submitting it flushes a pending manual edit first (like
+  Download); a failed flush blocks the save so stale text can't land.
+- **Migration**: `docs/migrations/2026-09-02_draft_job_post_link.sql` —
+  additive, nullable `drafts.job_post_id` + index, `on delete set null`,
+  no backfill. Run by hand in the Supabase SQL editor.
+- **Deferred still**: reuse beyond the producing job post (a document
+  library, copy to another post). Re-running the writer overwrites the
+  slot and supersedes a saved edit.
 
 ## 2026-09-02 — page.html: drop the dangling `for` on a checklist's group label
 

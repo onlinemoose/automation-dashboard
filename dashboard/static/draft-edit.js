@@ -444,6 +444,20 @@
     });
   }
 
+  // "Save to job post": flush a pending manual edit first, then let the
+  // form post — same as Download, but a failed flush blocks the submit
+  // (the save would otherwise persist stale text into the job post).
+  var saveForm = document.getElementById("draft-save-form");
+  if (saveForm) {
+    saveForm.addEventListener("submit", function (e) {
+      if (!docDirty) return;
+      e.preventDefault();
+      saveDoc().then(function () {
+        if (!docDirty) saveForm.submit();
+      });
+    });
+  }
+
   // --- history -----------------------------------------------------
 
   function addHistory(entry) {

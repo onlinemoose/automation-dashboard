@@ -161,6 +161,48 @@ def _save_result(page: Page, job_post_id: str, user_id: str, output: object) -> 
     )
 
 
+def _section_slug(heading: str) -> str:
+    """The slug a result section is addressed by — must match the
+    `heading | lower | replace(' ', '-')` in `_result_panel.html`."""
+    return (heading or "").lower().replace(" ", "-")
+
+
+def _draft_saved_into_slot(
+    page: Page, existing: object, section: str, text: str
+) -> dict:
+    """A job post result-slot payload with one section's Markdown swapped
+    for the edited draft `text`.
+
+    Patches the stored `_result_payload` in place — the section whose slug
+    is `section`, cost meta and the other sections untouched, `saved_at`
+    bumped. If nothing usable is stored yet (or no section matches), builds
+    a minimal one-section payload from the page's own section headings so
+    the heading / `editable` flag stay right.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    if isinstance(existing, dict) and existing.get("sections"):
+        sections = []
+        patched = False
+        for raw in existing["sections"]:
+            s = dict(raw) if isinstance(raw, dict) else {}
+            if _section_slug(str(s.get("heading") or "")) == section:
+                s["markdown"] = text
+                patched = True
+            sections.append(s)
+        if patched:
+            return {**existing, "sections": sections, "saved_at": now}
+    heading, editable = section, True
+    for s in page.sections(page.example_output):
+        if _section_slug(s.heading) == section:
+            heading, editable = s.heading, s.editable
+            break
+    return {
+        "sections": [{"heading": heading, "markdown": text, "editable": editable}],
+        "meta": None,
+        "saved_at": now,
+    }
+
+
 def _session_secret() -> str:
     value = os.environ.get("SESSION_SECRET")
     if not value:
@@ -741,11 +783,15 @@ def create_app(
         page_slug = str(form.get("slug") or "").strip()
         section = str(form.get("section") or "").strip()
         text = str(form.get("text") or "")
+        # The job post this result was written for, when there was one —
+        # carried from the result panel so "Save to job post" in the editor
+        # can write the edited text back into that post's result slot.
+        job_post_id = str(form.get("job_post_id") or "").strip()
         if not page_slug or not section or not text.strip():
             raise HTTPException(status_code=422, detail="slug, section and text are required")
         uid = _auth.current_user_id(request)
         draft = await run_in_threadpool(
-            _drafts.create_or_get_draft, page_slug, section, text, uid
+            _drafts.create_or_get_draft, page_slug, section, text, uid, job_post_id
         )
         return RedirectResponse(f"/drafts/{draft.id}", status_code=303)
 
@@ -905,6 +951,41 @@ def create_app(
             content=draft.current,
             media_type="text/markdown; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{name}.md"'},
+        )
+
+    @app.post("/drafts/{draft_id}/save")
+    async def draft_save(request: Request, draft_id: str):
+        """Write the edited draft back into the job post it was written for
+        — the producing page's result slot on that post — then return to
+        the writer page, which re-renders that saved result. The editor's
+        JS flushes any unsaved manual edit before submitting this form."""
+        if (redirect := guard(request)) is not None:
+            return redirect
+        uid = _auth.current_user_id(request)
+        draft = await run_in_threadpool(_drafts.get_draft, draft_id, uid)
+        if draft is None:
+            raise HTTPException(status_code=404)
+        page = PAGES_BY_SLUG.get(draft.slug)
+        if not draft.job_post_id or page is None or not page.saved_result_slot:
+            raise HTTPException(
+                status_code=400, detail="This draft is not linked to a job post."
+            )
+        job_post = await run_in_threadpool(_jobs.get_job_post, draft.job_post_id, uid)
+        if job_post is None:
+            raise HTTPException(status_code=404)
+        payload = _draft_saved_into_slot(
+            page,
+            getattr(job_post, page.saved_result_slot, None),
+            draft.section,
+            draft.current,
+        )
+        await run_in_threadpool(
+            lambda: _jobs.update_job_post(
+                draft.job_post_id, uid, **{page.saved_result_slot: payload}
+            )
+        )
+        return RedirectResponse(
+            f"/p/{draft.slug}?job_post_id={quote(draft.job_post_id)}", status_code=303
         )
 
     return app

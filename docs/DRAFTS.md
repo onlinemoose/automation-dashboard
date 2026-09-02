@@ -4,7 +4,7 @@ A capability result is usually close but not right. Instead of re-running
 the whole writer, open a result section as a **working draft** and change
 it in place: type directly into it, or revise one span at a time (select
 a sentence, say what to change, and only that sentence is rewritten).
-Then download it.
+Then save it back to the job post it was written for, or download it.
 
 This is **the app's own storage** (CLAUDE.md rule 6): private to the
 dashboard, no capability sees it. The `targeted-editor` capability is
@@ -29,10 +29,14 @@ span replaced — so it shows in History and `Undo last` reverts it.
    discards it; **Retry** re-asks with the same span (optionally an
    amended instruction).
 5. Or just **type into the draft** — it's editable text, not a read-only
-   view. The change autosaves (on blur, or first if you hit Download or
-   Undo before that fires) as one revision (instruction `(manual edit)`).
+   view. The change autosaves (on blur, or first if you hit Save, Download
+   or Undo before that fires) as one revision (instruction `(manual edit)`).
 6. **Undo last** drops the most recent revision — a span accept or a
-   manual edit alike. **Download .md** saves what's on screen.
+   manual edit alike. **Save to job post** writes what's on screen back
+   into the job post this draft came from and returns to the writer page,
+   which then shows that saved version (only shown when the draft has a
+   job post behind it — the writer pages always do). **Download .md**
+   saves what's on screen as a file.
 
 Only one edit is in flight at a time — while a span proposal is open, the
 draft is briefly locked (not directly editable) and new selections are
@@ -46,11 +50,13 @@ ignored, until it's accepted, rejected, or cancelled.
 | The splice + undo-by-replay | `apply_revision()` / `replay()` in `dashboard/_drafts.py` |
 | Capability adapter | `dashboard/_targeted_edit.py` |
 | Screens | `/drafts*` routes in `dashboard/app.py`, `templates/draft.html`, `static/draft-edit.js` |
-| Entry point | the "Edit draft" button in `templates/_result_panel.html`, per `Section` where `editable` is true |
+| Entry point | the "Edit draft" button in `templates/_result_panel.html`, per `Section` where `editable` is true — it carries the current `job_post_id` onto the draft |
+| Save back to the job post | `POST /drafts/{id}/save` → `_draft_saved_into_slot` patches the post's result slot, then redirects to `/p/{slug}?job_post_id=…` |
 
 `/drafts`, `/drafts/{draft_id}`, `/drafts/{draft_id}/revise`,
 `/drafts/{draft_id}/accept`, `/drafts/{draft_id}/undo`,
-`/drafts/{draft_id}/edit`, `/drafts/{draft_id}/download` are app-native
+`/drafts/{draft_id}/edit`, `/drafts/{draft_id}/download`,
+`/drafts/{draft_id}/save` are app-native
 routes — not capability pages. `tests/test_guardrails.py` lists them in `ALLOWED_ROUTES` for that
 reason, the same category as `/jobs` and `/documents`.
 
@@ -119,10 +125,12 @@ create table drafts (
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   user_id      uuid not null references auth.users(id) on delete cascade,
+  job_post_id  uuid references job_posts(id) on delete set null,  -- the post this result was written for, when there was one
   unique (user_id, slug, section, source_hash)
 );
 
-create index if not exists drafts_user_id_idx on drafts (user_id);
+create index if not exists drafts_user_id_idx     on drafts (user_id);
+create index if not exists drafts_job_post_id_idx on drafts (job_post_id);
 
 grant all privileges on table drafts to service_role;
 alter table drafts enable row level security;
@@ -143,6 +151,12 @@ alter table drafts enable row level security;
   offsets reproduce exactly because every edit was taken against the
   freshly-updated `current` (one edit at a time, accept before the next).
   Linear history only.
+- **`job_post_id` is nullable and not part of the dedupe key.** It is
+  stamped on create from the "Edit draft" form, and back-filled by
+  `create_or_get` if a draft first opened without a post is later re-opened
+  from one. `on delete set null`: deleting the job post orphans the draft,
+  it doesn't vanish. Additive migration —
+  `docs/migrations/2026-09-02_draft_job_post_link.sql`.
 
 Uses `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` (already declared for
 Background documents and Job posts). If either is missing, `_drafts.py`
@@ -152,16 +166,17 @@ across a restart. Fine for local dev and tests.
 ## `slug` / `section` / `text` are app-storage keys
 
 The `POST /drafts` body carries the producing page's `slug`, the Output
-`section` slug, and that section's `text` — all app-storage keys, not a
-capability `Input`. The capability only ever sees `document` (the current
-draft), `selection`, `instruction`, and `kind`.
+`section` slug, that section's `text`, and the `job_post_id` it was
+written for (when there was one) — all app-storage keys, not a capability
+`Input`. The capability only ever sees `document` (the current draft),
+`selection`, `instruction`, and `kind`.
 
 ## Notes / limits
 
 - **Per-user scoped.** Every query filters on `user_id`, reads and writes
   alike, and each public function takes the owning user's id as its last
-  required argument (`create_or_get_draft(slug, section, text, user_id)`,
-  `get_draft(draft_id, user_id)`,
+  required argument (`create_or_get_draft(slug, section, text, user_id,
+  job_post_id="")`, `get_draft(draft_id, user_id)`,
   `record_revision(draft_id, user_id, *, …)`,
   `undo_last(draft_id, user_id)`). Every draft route already 404s on a
   `None` fetch, so **another user's draft returns 404, not 403** — the
@@ -183,8 +198,10 @@ draft), `selection`, `instruction`, and `kind`.
   or splits with no separator, desyncing the span-selection offsets.
   `draft-edit.js` inserts the character itself via a `Range`, and does
   the same for a paste (plain text only, HTML formatting stripped). A
-  change autosaves on blur, or is flushed first if Download or Undo is
-  used before that fires — either always acts on what's on screen. This
+  change autosaves on blur, or is flushed first if Save, Download or Undo
+  is used before that fires — each always acts on what's on screen (a Save
+  is blocked if that flush fails, so a stale edit can't reach the job
+  post). This
   choice was deliberate: it reuses the existing Range-based
   selection-offset code for the span-revision flow untouched, rather than
   swapping the `<pre>` for a `<textarea>`, which has no equivalent API for
@@ -193,8 +210,15 @@ draft), `selection`, `instruction`, and `kind`.
   a `<pre>` so selection offsets map 1:1 to the stored text with no
   DOM-range-to-source mapping. A "preview rendered" toggle is a later
   add.
-- **Download only.** Saving an edited draft back to a Job post or other
-  downstream reuse is deferred.
+- **Save back to the job post, or download.** "Save to job post" writes
+  the current text into that post's `cover_letter` / `tailored_cv` result
+  slot (`_draft_saved_into_slot` patches the stored payload — that one
+  section's Markdown, cost meta and the rest untouched) and redirects to
+  `/p/{slug}?job_post_id=…`, which re-renders the saved result. The button
+  is hidden for a draft with no `job_post_id`. Re-running the writer
+  overwrites the slot and supersedes a saved edit. Reuse beyond the
+  producing job post (a document library, another job post) is still
+  deferred.
 - **Whole-draft feedback is a separate mode** (deferred): an instruction
   with no selection that re-runs the original writer with the
   instruction folded in.

@@ -223,6 +223,8 @@ button:hover, .button:hover { filter: brightness(1.05); }
   .draft__doc::selection, .draft__doc ::selection { background: #2f5a4b; }
 }
 .draft__doc--locked { outline: 2px solid var(--accent); outline-offset: 2px; }
+.draft__save { display: flex; justify-content: flex-end; margin: 0.75rem 0 0; }
+.draft__save button { margin: 0; }
 .draft__revise-btn {
   position: fixed; margin: 0; padding: 0.35rem 0.7rem; font-size: 0.85rem;
   z-index: 50; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
