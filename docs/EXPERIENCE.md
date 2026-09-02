@@ -213,6 +213,11 @@ span revision into the stored text (undo is replay from the immutable
 `original`). The revision itself is a capability call at an allowed seam —
 `targeted-editor`, invoked from the `/drafts/{id}/revise` handler.
 
+These three stores plus the writer pages are one **product area**, the Job
+Application Co-Pilot. When a second area lands it gets its own folder and
+may not import this one. The boundary, the guardrail, and the
+add-an-area recipe are in `docs/AREAS.md` (and `CLAUDE.md` "## Areas").
+
 ## Chaining capabilities
 
 When a page needs two capabilities — e.g. extract text from an upload,

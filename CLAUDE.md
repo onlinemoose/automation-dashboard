@@ -83,6 +83,36 @@ say in one line what you left, changed, or removed beyond the literal
 ask. For UI areas the user wants kept spare, add tests that assert what
 must *not* be there, not just what must.
 
+## Areas
+
+The dashboard hosts **product areas** — self-contained slices that share
+only the shell. Each area owns its pages, app-owned stores, capability
+adapters, routes, templates, and docs. **Areas never import each other.**
+
+| Area | Entry | Owns |
+|---|---|---|
+| **Job Application Co-Pilot** | `/jobs` | `dashboard/pages/{cover_letter_writer,cv_writer}.py` (+ `pages/_examples/`), `dashboard/_{documents,jobs,drafts,job_analysis,targeted_edit}.py`, the `/documents* /jobs* /drafts*` route blocks in `app.py`, `templates/{jobs,job_form,job_detail,documents,document_form,draft}.html`, `static/draft-edit.js`, `docs/{JOB_POSTS,DRAFTS,BACKGROUND_DOCUMENTS}.md`, `tests/test_{jobs,drafts,documents}.py`. Capabilities: cover-letter-writer, cv-writer, job-analyst, targeted-editor. |
+
+**Shell** (shared; every area depends on it, it depends on no area):
+`app.py` routing skeleton + `/p/{slug}` + streaming, `_auth.py`,
+`_render.py`, `pages/_spec.py`, `pages/__init__.py`,
+`templates/{base,login,index,page,result,_result_panel,_running_*}.html`,
+`static/app.css`, `docs/{EXPERIENCE,DEPLOY,DEPLOYMENT_CHECKLIST,USER_SCOPING}.md`,
+`tests/test_{pages,auth,auth_backend,guardrails}.py`.
+
+**Working rule.** When a task names one area, change only that area's
+files and — if unavoidable — the shell. Do not open or edit another
+area's files. If a change seems to need cross-area edits, stop and ask:
+the boundary is probably wrong, or the thing belongs in the shell.
+
+**Adding an area** never edits an existing area's files. It adds
+`dashboard/areas/<name>/` (self-contained: `pages/`, stores, adapters,
+`routes.py` as an `APIRouter`, `templates/`, `static/`, `docs/`, nested
+`CLAUDE.md`), an entry in the area manifest in `tests/test_guardrails.py`,
+one `app.include_router(...)` line and one `PAGES` extension in the shell.
+Full recipe: `docs/AREAS.md`. `tests/test_guardrails.py` fails if one
+area imports another.
+
 ## Structure
 
 ```

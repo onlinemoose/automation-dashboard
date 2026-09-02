@@ -3,6 +3,43 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-02 — Name the "area" boundary (docs + guardrail, no code moved)
+
+The dashboard's whole second layer — `_documents.py`, `_jobs.py`,
+`_drafts.py`, `_job_analysis.py`, `_targeted_edit.py`, the writer pages,
+the `/documents* /jobs* /drafts*` routes — is one product area, the **Job
+Application Co-Pilot**. A second, unrelated area (Event Research) lands in
+~2 weeks. Nothing in the repo named an "area", so a task scoped to one
+could read and edit the other.
+
+Added the boundary as documentation + one guardrail, **no existing code
+moved**:
+
+- **`tests/test_guardrails.py`** — an area manifest (`SHELL_MODULES`,
+  `SHELL_ROUTES`, `COMPOSITION_ROOTS`, `AREAS` with per-area `modules` +
+  `routes`); `ALLOWED_ROUTES` is now derived from it. Three new tests:
+  `test_every_dashboard_module_is_claimed_by_the_manifest`,
+  `test_areas_do_not_cross_import` (the area twin of
+  `test_no_page_imports_another_page` — shell imports no area except the
+  composition roots `dashboard.app` / `dashboard.pages`), and
+  `test_every_route_belongs_to_shell_or_one_area`.
+- **`CLAUDE.md`** — new "## Areas" section: the map, the working rule
+  ("stay in one area"), and the add-an-area outline.
+- **`docs/AREAS.md`** — new. The map + why, the guardrail, and the full
+  Event Research recipe (`dashboard/areas/<name>/` layout, the `AREA`
+  export, the two shell edits, the manifest entry, the nested
+  `CLAUDE.md`).
+- **`docs/EXPERIENCE.md`** — one cross-link from "App-owned storage".
+
+**Deferred, on purpose:** Job Application stays flat under `dashboard/`
+(the guardrail isolates it; moving ~15 files buys nothing today). Its
+`app.py` route blocks + module-top helpers are the designated first slice
+of the eventual `areas/job_application/` move — to be done **when Event
+Research lands**, so the shared `render`/`guard` shell surface is designed
+against a real second consumer. Orthogonal do-anytime cleanup noted in
+`docs/AREAS.md`: a `require_user` + `load_draft` `Depends` pass over
+`app.py`.
+
 ## 2026-09-02 — page.html: drop the dangling `for` on a checklist's group label
 
 `page.html` emitted `<label for="{{ f.name }}">` for every field,
