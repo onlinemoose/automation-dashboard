@@ -13,7 +13,7 @@
   {% endif %}
   <header class="topbar">
     <a class="brand" href="/"><img class="brand__mark" src="/static/favicon.svg?v={{ asset_v }}" alt="" width="22" height="22">Automation&nbsp;Dashboard</a>
-    <nav>{% block nav %}<a href="/jobs">Job posts</a> <a href="/documents">Documents</a> {% if user_email %}<span class="topbar__user">{{ user_email }}</span> {% endif %}<a href="/logout">Sign out</a>{% endblock %}</nav>
+    <nav>{% block nav %}<a href="/jobs">Job posts</a> <a href="/documents">Documents</a><span class="topbar__sep" aria-hidden="true"></span>{% if user_email %}<span class="topbar__user">{{ user_email }}</span> {% endif %}<a href="/logout">Sign out</a>{% endblock %}</nav>
   </header>
   <main>
     {% block main %}{% endblock %}

@@ -38,10 +38,19 @@ body {
 .topbar nav a { color: var(--ink-soft); text-decoration: none; font-size: 0.9rem; }
 .topbar nav a + a { margin-left: 1rem; }
 .topbar nav a:hover { color: var(--ink); }
+/* Divider between the primary nav (Job posts, Documents) and the
+   account controls (signed-in email, Sign out). */
+.topbar__sep {
+  display: inline-block; width: 1px; height: 0.9rem;
+  margin: 0 0.75rem 0 1rem; vertical-align: middle;
+  background: var(--line);
+}
 /* Who is signed in. Sits between the nav links and "Sign out", so it
    carries the spacing the `a + a` rule above no longer supplies there. */
 .topbar__user { color: var(--ink-soft); font-size: 0.9rem; margin-left: 1rem; }
 .topbar nav .topbar__user + a { margin-left: 1rem; }
+.topbar nav .topbar__sep + .topbar__user,
+.topbar nav .topbar__sep + a { margin-left: 0; }
 main { padding: 2rem 1.25rem 4rem; }
 .stubbanner {
   margin: 0; padding: 0.6rem 1.25rem; font-size: 0.85rem;
