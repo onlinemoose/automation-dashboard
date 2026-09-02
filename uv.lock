@@ -80,7 +80,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cover-letter-writer", git = "https://github.com/onlinemoose/cover-letter-writer.git?rev=v0.13.0" },
+    { name = "cover-letter-writer", git = "https://github.com/onlinemoose/cover-letter-writer.git?rev=v0.13.1" },
     { name = "cv-writer", git = "https://github.com/onlinemoose/cv-writer.git?rev=v0.6.2" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "itsdangerous", specifier = ">=2.2" },
@@ -216,8 +216,8 @@ wheels = [
 
 [[package]]
 name = "cover-letter-writer"
-version = "0.13.0"
-source = { git = "https://github.com/onlinemoose/cover-letter-writer.git?rev=v0.13.0#b9e7d0536c710d7f0d78d1face8f9dfac42faf1b" }
+version = "0.13.1"
+source = { git = "https://github.com/onlinemoose/cover-letter-writer.git?rev=v0.13.1#2db81ddcfe1d3fa84394d9aa4f15c6e8840f91bd" }
 dependencies = [
     { name = "anthropic" },
 ]
