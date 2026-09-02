@@ -86,12 +86,16 @@ FIELDS = (
         "this run. Manage them under Documents.",
     ),
     Field(
-        "background_documents",
-        "Background notes",
+        # Not the contract argument (that's `background_documents`, a list).
+        # This is the free-text half of it: one ad-hoc note for this run,
+        # merged in build_input alongside the ticked saved documents. Named
+        # for what it is, like `background_document_ids` above.
+        "additional_context",
+        "Additional context",
         widget="textarea",
-        help="Optional. A one-off note for this run only — portfolio notes, project "
-        "write-ups, a bio, older roles left off the CV, company context. Treated "
-        "as one document.",
+        help="Optional. One-off context for this run — project write-ups, a bio, "
+        "older roles left off the CV, company context. Not saved; reusable text "
+        "belongs under Documents. Added as one more background document for this run.",
     ),
 )
 
@@ -181,7 +185,7 @@ def build_input(form, user_id: str) -> Input:
     # `background_document_ids` are keys into the app's own Background documents
     # store; resolve them to text and fold into the contract's `background_documents`.
     saved = _documents.get_documents(r.multi("background_document_ids"), user_id)
-    background = r.text("background_documents", "Background notes")
+    background = r.text("additional_context", "Additional context")
     r.done()
     return Input(
         job_posting=job_posting,

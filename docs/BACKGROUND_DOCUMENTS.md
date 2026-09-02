@@ -25,7 +25,7 @@ into text.
 | Store (the only module that talks to Supabase) | `dashboard/_documents.py` |
 | CRUD screen | `/documents` routes in `dashboard/app.py`, `templates/documents.html`, `templates/document_form.html` |
 | The pickers on a writer page | `"checklist"` (background) and `"doc_picker"` (the CV) widgets in `dashboard/pages/_spec.py` + `templates/page.html` |
-| Wiring into the contract | `build_input` in `dashboard/pages/cover_letter_writer.py` and `cv_writer.py` — the picked CV id resolves to `cv`, ticked ids fold into `background_documents` |
+| Wiring into the contract | `build_input` in `dashboard/pages/cover_letter_writer.py` and `cv_writer.py` — the picked CV id resolves to `cv`; ticked ids plus the `additional_context` textarea fold into `background_documents` |
 
 `/documents`, `/documents/new`, `/documents/{doc_id}`,
 `/documents/{doc_id}/delete` are app-native routes — not capability pages.
@@ -94,12 +94,18 @@ the vars before the deploy lands.
    the ticked ids and `_documents.get_documents(ids)` to fetch their text.
 4. Each document body is prepended to the contract's
    `background_documents: list[str]`, ahead of anything typed into the
-   free-text "Background notes" box (which is kept, for one-off notes).
+   free-text "Additional context" box (`additional_context`) — that box's
+   whole contents are appended as one final list element, one more
+   "document" for this run only. The capability renders every element the
+   same way (`### Document N` under a "Supplementary background" heading);
+   it can't tell a saved doc from the typed note.
 
-The field name is `background_document_ids`, not the contract argument —
-it carries app-storage keys, and `build_input` is where they become
-contract data. It's the one deliberate exception to "a `Field.name`
-matches an `Input` argument".
+Neither form field is a 1:1 mirror of the contract: `background_documents`
+is fed by **two** widgets. `background_document_ids` (the checklist)
+carries app-storage keys; `additional_context` (the textarea) is the
+free-text half. Both are named for what they are, and `build_input` is
+where they become contract data — the one deliberate exception to "a
+`Field.name` matches an `Input` argument".
 
 ## Notes / limits
 

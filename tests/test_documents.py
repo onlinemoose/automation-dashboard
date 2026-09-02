@@ -139,7 +139,7 @@ def test_another_users_document_id_cannot_be_smuggled_into_a_run(monkeypatch) ->
         "/p/cover-letter-writer",
         data={**dict(cover_letter_writer.PAGE.example_form),
               "background_document_ids": foreign.id,
-              "background_documents": "b's own note"},
+              "additional_context": "b's own note"},
     )
     assert resp.status_code == 200, resp.text
     assert seen["data"].background_documents == ["b's own note"]
@@ -259,6 +259,14 @@ def test_checklist_appears_on_the_writer_page(client: TestClient) -> None:
     assert "Bio" in body
 
 
+def test_free_text_note_field_is_named_for_what_it_is(client: TestClient) -> None:
+    for slug in ("cover-letter-writer", "cv-writer"):
+        body = client.get(f"/p/{slug}?example=1").text
+        assert 'name="additional_context"' in body
+        # The old name collided with the contract argument; it's gone.
+        assert 'name="background_documents"' not in body
+
+
 def test_ticked_documents_reach_the_capability_input(monkeypatch) -> None:
     doc = _documents.create_document("Bio", "Ten years shipping data tools.", USER)
 
@@ -275,7 +283,7 @@ def test_ticked_documents_reach_the_capability_input(monkeypatch) -> None:
         "/p/cover-letter-writer",
         data={**dict(cover_letter_writer.PAGE.example_form),
               "background_document_ids": doc.id,
-              "background_documents": "a one-off note"},
+              "additional_context": "a one-off note"},
     )
     assert resp.status_code == 200, resp.text
     assert seen["data"].background_documents == [

@@ -3,6 +3,23 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-02 — Writer forms: rename the free-text box to `additional_context`
+
+The free-text box on the Cover Letter / CV pages was
+`Field("background_documents", "Background notes", widget="textarea")` —
+the `name` was byte-identical to the capability's `background_documents`
+list argument, so it read as *the* mirror of it when it's only the
+free-text half (the `background_document_ids` checklist is the other
+half). Renamed to `additional_context` / "Additional context", help
+reworded ("one-off context for this run, not saved").
+
+`build_input` reads the new key; the `Input(background_documents=…)` call
+is unchanged — the box's whole contents are still appended as one final
+list element, indistinguishable to the capability from a saved document.
+`docs/BACKGROUND_DOCUMENTS.md` "one deliberate exception" note now spells
+out that `background_documents` is fed by two widgets, both named for
+what they are.
+
 ## 2026-09-02 — CVs are a distinct document kind
 
 Background documents now carry an `is_cv` flag. A CV is offered only in
