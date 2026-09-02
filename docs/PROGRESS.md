@@ -3,7 +3,21 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
-## 2026-09-02 — page.html: drop the dangling `for` on a checklist's group label
+## 2026-09-02 — Upgrade cv-writer to v0.6.2 (output ceiling 8k → 16k)
+
+Long / full regional CVs (a German Lebenslauf, a multi-page academic CV)
+were hitting `cv-writer`'s `MAX_TOKENS = 8_000` cap mid-document: the
+capability raised `RuntimeError` ("hit the length cap before finishing")
+after streaming a partial CV, which the CV Writer page surfaced as "The
+run didn't finish (RuntimeError). Nothing was saved."
+
+Fixed in the capability, not here (CLAUDE.md rule 1): `cv-writer` v0.6.0
+raises `MAX_TOKENS` to 16_000 — safe because the call already streams,
+and `max_tokens` is only a ceiling, so unused headroom isn't billed.
+v0.6.1 / v0.6.2 are version-string housekeeping in that repo. Pin bumped
+`v0.5.0` → `v0.6.2` in `[tool.uv.sources]`, `uv lock` (resolves to
+`8f8efc7`). No dashboard code change; no Render PAT change (same repo,
+new ref).
 
 `page.html` emitted `<label for="{{ f.name }}">` for every field,
 including the `checklist` — which renders many checkboxes and no element
