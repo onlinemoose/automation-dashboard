@@ -255,6 +255,7 @@ create table job_posts (
   job_title    text not null default '',
   cover_letter jsonb,
   tailored_cv  jsonb,
+  created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
   user_id      uuid not null references auth.users(id) on delete cascade
 );
@@ -279,6 +280,11 @@ alter table job_posts add column if not exists tailored_cv  jsonb;
 -- used to pre-fill the writer forms
 alter table job_posts add column if not exists company   text not null default '';
 alter table job_posts add column if not exists job_title text not null default '';
+
+-- upload date, so the list can order newest-first independent of edits
+-- (existing rows backfill to their updated_at, the closest we have)
+alter table job_posts add column if not exists created_at timestamptz not null default now();
+update job_posts set created_at = updated_at;
 ```
 
 Adding a `text` column with a constant default, or a nullable `jsonb`
@@ -293,6 +299,9 @@ for local dev and tests; set the vars for anything real.
 
 ## Notes / limits
 
+- **The list is ordered newest-uploaded-first**, by `created_at` — set once
+  at creation and never touched again, so editing, analysing, or saving a
+  post never reorders the list.
 - **Analyse overwrites the emphasis box.** It's step 2 of the workflow —
   analyse, then annotate, then Save. Re-analysing (only offered once the
   list has content) asks for confirmation first.
