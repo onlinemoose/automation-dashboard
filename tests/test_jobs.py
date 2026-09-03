@@ -84,7 +84,8 @@ def test_store_crud_roundtrip() -> None:
     a = _jobs.create_job_post("Acme — Product Lead", POSTING, USER)
     b = _jobs.create_job_post("Bract — PM", "Another posting.", USER)
 
-    assert [j.title for j in _jobs.list_job_posts(USER)] == ["Acme — Product Lead", "Bract — PM"]
+    # newest upload first
+    assert [j.title for j in _jobs.list_job_posts(USER)] == ["Bract — PM", "Acme — Product Lead"]
     assert _jobs.get_job_post(a.id, USER).posting == POSTING
     assert a.emphasis == ""
 

@@ -57,6 +57,7 @@ class JobPost:
     # saved_at} once it has. App-owned display data, never capability input.
     cover_letter: dict | None = None
     tailored_cv: dict | None = None
+    created_at: datetime | None = None  # when the post was uploaded; list() orders newest-first by this
     updated_at: datetime | None = None
     user_id: str = ""  # the Supabase auth.users id that owns this row
 
@@ -104,8 +105,10 @@ class _MemoryBackend:
         self._lock = threading.Lock()
 
     def list(self, user_id: str) -> list[JobPost]:
+        # Dict insertion order is creation order; reversed gives
+        # newest-uploaded-first without depending on clock resolution.
         mine = [j for j in self._jobs.values() if j.user_id == user_id]
-        return sorted(mine, key=lambda j: j.title.lower())
+        return list(reversed(mine))
 
     def get(self, job_id: str, user_id: str) -> JobPost | None:
         job = self._jobs.get(job_id)
@@ -114,13 +117,15 @@ class _MemoryBackend:
     def create(self, title: str, posting: str, user_id: str) -> JobPost:
         with self._lock:
             self._seq += 1
+            now = datetime.now(timezone.utc)
             job = JobPost(
                 id=f"mem-{self._seq}",
                 title=title,
                 posting=posting,
                 emphasis="",
                 summary="",
-                updated_at=datetime.now(timezone.utc),
+                created_at=now,
+                updated_at=now,
                 user_id=user_id,
             )
             self._jobs[job.id] = job
@@ -156,6 +161,7 @@ class _MemoryBackend:
                 job_title=current.job_title if job_title is None else job_title,
                 cover_letter=current.cover_letter if cover_letter is None else cover_letter,
                 tailored_cv=current.tailored_cv if tailored_cv is None else tailored_cv,
+                created_at=current.created_at,  # upload date never changes on edit
                 updated_at=datetime.now(timezone.utc),
                 user_id=current.user_id,  # the rebuilt row keeps its owner
             )
@@ -190,12 +196,19 @@ class _SupabaseBackend:
             job_title=row.get("job_title") or "",
             cover_letter=_as_result(row.get("cover_letter")),
             tailored_cv=_as_result(row.get("tailored_cv")),
+            created_at=_parse_ts(row.get("created_at")),
             updated_at=_parse_ts(row.get("updated_at")),
             user_id=row.get("user_id") or "",
         )
 
     def list(self, user_id: str) -> list[JobPost]:
-        res = self._table().select("*").eq("user_id", user_id).order("title").execute()
+        res = (
+            self._table()
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
         return [self._row(r) for r in (res.data or [])]
 
     def get(self, job_id: str, user_id: str) -> JobPost | None:
