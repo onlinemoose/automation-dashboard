@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}{{ brief.title }} — Content briefs{% endblock %}
+{% block main %}
+<section class="panel">
+  <p class="crumb"><a href="/content">&larr; Content briefs</a></p>
+  <h1>{{ brief.title }}</h1>
+
+  {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
+
+  {# --- the brief: goal, content brief, and the optional knobs --- #}
+  <form method="post" action="/content/{{ brief.id }}">
+    <div class="field{% if 'title' in errors %} field--error{% endif %}">
+      <label for="title">Title <span class="req" title="required">*</span></label>
+      <input type="text" id="title" name="title" value="{{ values.get('title', brief.title) }}" required>
+      {% if 'title' in errors %}<p class="error">{{ errors['title'] }}</p>{% endif %}
+    </div>
+    <div class="field{% if 'goal' in errors %} field--error{% endif %}">
+      <label for="goal">Goal <span class="req" title="required">*</span></label>
+      <p class="help">The purpose the piece serves, not just its subject.</p>
+      <textarea id="goal" name="goal" rows="4" required>{{ values.get('goal', brief.goal) }}</textarea>
+      {% if 'goal' in errors %}<p class="error">{{ errors['goal'] }}</p>{% endif %}
+    </div>
+    <div class="field{% if 'content_brief' in errors %} field--error{% endif %}">
+      <label for="content_brief">Content brief <span class="req" title="required">*</span></label>
+      <p class="help">The substance — angle, key points, argument shape, structure to follow.</p>
+      <textarea id="content_brief" name="content_brief" rows="14" required>{{ values.get('content_brief', brief.content_brief) }}</textarea>
+      {% if 'content_brief' in errors %}<p class="error">{{ errors['content_brief'] }}</p>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="topic_areas">Topic areas</label>
+      <p class="help">Optional. One categorisation tag per line.</p>
+      <textarea id="topic_areas" name="topic_areas" rows="3">{{ values.get('topic_areas', brief.topic_areas) }}</textarea>
+    </div>
+    <div class="field">
+      <label for="audience">Audience</label>
+      <p class="help">Optional. A persona label, e.g. "Engineering managers".</p>
+      <input type="text" id="audience" name="audience" value="{{ values.get('audience', brief.audience) }}">
+    </div>
+    <div class="field">
+      <label for="audience_brief">Audience brief</label>
+      <p class="help">Optional. Enriched detail about that audience.</p>
+      <textarea id="audience_brief" name="audience_brief" rows="3">{{ values.get('audience_brief', brief.audience_brief) }}</textarea>
+    </div>
+    <div class="field{% if 'target_length_words' in errors %} field--error{% endif %}">
+      <label for="target_length_words">Target length (words)</label>
+      <p class="help">Optional. A soft target. Leave blank (or 0) for none.</p>
+      <input type="number" id="target_length_words" name="target_length_words"
+             value="{{ values.get('target_length_words', brief.target_length_words) or '' }}">
+      {% if 'target_length_words' in errors %}<p class="error">{{ errors['target_length_words'] }}</p>{% endif %}
+    </div>
+    <div class="field">
+      <label for="call_to_action">Call to action</label>
+      <p class="help">Optional. What the ending should turn the reader toward.</p>
+      <textarea id="call_to_action" name="call_to_action" rows="3">{{ values.get('call_to_action', brief.call_to_action) }}</textarea>
+    </div>
+    <div class="field">
+      <label for="target_keywords">Target keywords</label>
+      <p class="help">Optional. One SEO keyword per line.</p>
+      <textarea id="target_keywords" name="target_keywords" rows="3">{{ values.get('target_keywords', brief.target_keywords) }}</textarea>
+    </div>
+    <div class="field">
+      <label for="house_style">House style</label>
+      <p class="help">Optional. Register, spelling/locale, date format, punctuation defaults.
+        Replaces the bundled default wholesale when set.
+        <a href="#" id="house-style-default-link">Insert the bundled default</a> to edit it down.</p>
+      <textarea id="house_style" name="house_style" rows="4">{{ values.get('house_style', brief.house_style) }}</textarea>
+    </div>
+
+    <details class="field">
+      <summary>Operator limits</summary>
+      <div class="field{% if 'max_usd' in errors %} field--error{% endif %}">
+        <label for="max_usd">Spend cap (USD)</label>
+        <p class="help">Stops the run at the next safe point when reached.</p>
+        <input type="number" step="0.01" id="max_usd" name="max_usd"
+               value="{{ values.get('max_usd', brief.max_usd) }}">
+        {% if 'max_usd' in errors %}<p class="error">{{ errors['max_usd'] }}</p>{% endif %}
+      </div>
+      <div class="field{% if 'max_editor_revisions' in errors %} field--error{% endif %}">
+        <label for="max_editor_revisions">Max editor rounds</label>
+        <input type="number" id="max_editor_revisions" name="max_editor_revisions"
+               value="{{ values.get('max_editor_revisions', brief.max_editor_revisions) }}">
+        {% if 'max_editor_revisions' in errors %}<p class="error">{{ errors['max_editor_revisions'] }}</p>{% endif %}
+      </div>
+      <div class="field{% if 'max_seo_revisions' in errors %} field--error{% endif %}">
+        <label for="max_seo_revisions">Max SEO-review rounds</label>
+        <input type="number" id="max_seo_revisions" name="max_seo_revisions"
+               value="{{ values.get('max_seo_revisions', brief.max_seo_revisions) }}">
+        {% if 'max_seo_revisions' in errors %}<p class="error">{{ errors['max_seo_revisions'] }}</p>{% endif %}
+      </div>
+    </details>
+
+    <button type="submit">Save brief</button>
+  </form>
+</section>
+
+{# --- run / piece --- #}
+<section class="panel">
+  {% if not piece %}
+  <h2>Run the content team</h2>
+  <p class="lede">Research → draft → edit → SEO review, looping until both gates pass.
+    First runs take a few minutes — keep the tab open.</p>
+  <form method="post" action="/content/{{ brief.id }}/run">
+    <button type="submit">Run the content team</button>
+  </form>
+  {% else %}
+  {% include "_content_result_panel.html" %}
+
+  <div class="panel">
+    <h2>Send back to the content team</h2>
+    <p class="help">One instruction per line. The team revises the current piece, reusing
+      the existing research and SEO brief.</p>
+    <form method="post" action="/content/{{ brief.id }}/send-back">
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="5"
+                  placeholder="tighten the open&#10;cut the third example&#10;less breathless in the middle"></textarea>
+      </div>
+      <div class="field">
+        <label for="quote">Quote a passage (optional)</label>
+        <textarea id="quote" name="quote" rows="2"
+                  placeholder="paste the exact passage a note is about"></textarea>
+        <input type="text" id="quote_comment" name="quote_comment" placeholder="what to change about it">
+      </div>
+      <button type="submit">Send back for revision</button>
+    </form>
+  </div>
+
+  <form method="post" action="/content/{{ brief.id }}/run" class="toolbar">
+    <button type="submit" class="button button--ghost">Run again from scratch</button>
+  </form>
+  {% endif %}
+</section>
+
+{% if runs %}
+<section class="panel">
+  <h2>Run history</h2>
+  <ol class="pagelist">
+    {% for run in runs | reverse %}
+    <li>
+      <span class="pagelist__title">{{ run.title or "(untitled)" }}</span>
+      <p class="pagelist__summary">
+        {{ run.saved_at }} ·
+        {% if run.approved %}approved{% else %}shipped flagged ({{ run.stopped_on }}){% endif %} ·
+        ${{ '%.4f' | format(run.cost_usd or 0) }}
+      </p>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+{# The bundled default house style, for the "Insert the bundled default" link.
+   `tojson` escapes it safely for embedding inside <script>. #}
+<script type="application/json" id="house-style-default">{{ house_style_default | tojson }}</script>
+<script>
+  (function () {
+    var link = document.getElementById("house-style-default-link");
+    var data = document.getElementById("house-style-default");
+    var field = document.getElementById("house_style");
+    if (!link || !data || !field) return;
+    link.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (field.value.trim() && !confirm("Replace the House style text with the bundled default?")) return;
+      field.value = JSON.parse(data.textContent);
+      field.focus();
+    });
+  })();
+</script>
+{% endblock %}

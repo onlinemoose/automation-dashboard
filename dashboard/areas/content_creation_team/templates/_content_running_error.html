@@ -1,0 +1,18 @@
+{# Final flush when run() raised. The HTTP status is already 200 (headers
+   went out with the first flush), so the failure is shown in the body.
+   Needs: page, error, brief_id. #}
+    <section class="panel">
+      <p class="crumb"><a href="/content/{{ brief_id }}">&larr; Back to the brief</a></p>
+      <p class="error">The run didn’t finish ({{ error }}). Nothing was saved — try again.</p>
+      <p><a class="button" href="/content/{{ brief_id }}">Back to the brief</a></p>
+    </section>
+    <script>
+      (function () {
+        if (window.__stopProgress) window.__stopProgress();
+        var w = document.getElementById("working");
+        if (w) w.remove();
+      })();
+    </script>
+  </main>
+</body>
+</html>

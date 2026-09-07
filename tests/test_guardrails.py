@@ -25,8 +25,9 @@ PAGES_DIR = DASHBOARD / "pages"
 
 SHELL_MODULES = {
     "dashboard",  # dashboard/__init__.py + dashboard/__main__.py
-    "dashboard.app", "dashboard._auth", "dashboard._render",
+    "dashboard.app", "dashboard._auth", "dashboard._render", "dashboard._streaming",
     "dashboard.hashpw", "dashboard.pages", "dashboard.pages._spec",
+    "dashboard.areas",  # the areas package marker; each area is claimed below
 }
 # The composition roots wire the areas into the shell — the page registry
 # lists each area's pages, app.py mounts each area's routes. They may
@@ -57,6 +58,22 @@ AREAS = {
             "/drafts/{draft_id}/accept", "/drafts/{draft_id}/undo",
             "/drafts/{draft_id}/edit", "/drafts/{draft_id}/download",
             "/drafts/{draft_id}/save",
+        },
+    },
+    # Content Creation Team — the first area under `dashboard/areas/`.
+    # Its routes live on an APIRouter (dashboard/areas/content_creation_team/
+    # routes.py), not in app.py, so `test_area_routers_declare_exactly_
+    # their_manifest_routes` cross-checks them.
+    "content_creation_team": {
+        "modules": {"dashboard.areas.content_creation_team"},  # prefix — whole folder
+        "routes": {
+            "/content", "/content/new", "/content/{brief_id}",
+            "/content/{brief_id}/delete", "/content/{brief_id}/run",
+            "/content/{brief_id}/send-back",
+            "/content/drafts", "/content/drafts/{draft_id}",
+            "/content/drafts/{draft_id}/revise", "/content/drafts/{draft_id}/accept",
+            "/content/drafts/{draft_id}/undo", "/content/drafts/{draft_id}/edit",
+            "/content/drafts/{draft_id}/download", "/content/drafts/{draft_id}/save",
         },
     },
     # "event_research": {"modules": {"dashboard.areas.event_research"},
@@ -276,6 +293,28 @@ def test_every_route_belongs_to_shell_or_one_area() -> None:
     assert not unclaimed, (
         "routes in app.py claimed by no area:\n  " + "\n  ".join(sorted(unclaimed))
     )
+
+
+def test_area_routers_declare_exactly_their_manifest_routes() -> None:
+    """An area's routes sit on its own `APIRouter`, not on `app` — the
+    parser in `test_every_route_belongs_to_shell_or_one_area` can't see
+    them. Cross-check each mounted area's router against its manifest entry
+    (and against its own `AREA.allowed_routes`)."""
+    from fastapi.routing import APIRoute
+
+    from dashboard.pages import AREAS as MOUNTED
+
+    for area in MOUNTED:
+        spec = AREAS.get(area.name)
+        assert spec is not None, f"mounted area {area.name!r} missing from the manifest"
+        paths = {r.path for r in area.router.routes if isinstance(r, APIRoute)}
+        assert paths == set(spec["routes"]), (
+            f"{area.name}: router paths {sorted(paths)} "
+            f"!= manifest {sorted(spec['routes'])}"
+        )
+        assert area.allowed_routes == frozenset(spec["routes"]), (
+            f"{area.name}: AREA.allowed_routes is out of sync with the manifest"
+        )
 
 
 def test_every_page_is_registered_and_well_formed() -> None:
