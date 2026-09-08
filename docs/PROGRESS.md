@@ -3,6 +3,15 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-08 — Content Creation Team: the piece behind an icon
+
+A brief's detail page now holds only the Briefing form + Save brief, plus
+the first-run "Run the content team" panel while no piece exists yet. Once
+`brief.piece` exists, a file icon under the title (and in the briefs list
+row, replacing the old unstyled "piece ready" text) opens a dedicated
+`GET /content/{brief_id}/piece` page carrying the result panel, "Send back
+to the content team", "Run again from scratch", and Run history.
+
 ## 2026-09-06 — New area: Content Creation Team (first `dashboard/areas/` slice)
 
 Wraps the `content-creation-team` capability (pinned `v0.1.0` = `dbe01a8`

@@ -63,6 +63,7 @@ ROUTES = frozenset(
         "/content/new",
         "/content/{brief_id}",
         "/content/{brief_id}/delete",
+        "/content/{brief_id}/piece",
         "/content/{brief_id}/run",
         "/content/{brief_id}/send-back",
         "/content/drafts",
@@ -350,6 +351,18 @@ async def brief_delete(request: Request, brief_id: str):
     return RedirectResponse("/content", status_code=303)
 
 
+@_briefs_router.get("/content/{brief_id}/piece", response_class=HTMLResponse)
+async def brief_piece(request: Request, brief_id: str):
+    if (redirect := _guard(request)) is not None:
+        return redirect
+    brief = await run_in_threadpool(_briefs.get_brief, brief_id, _uid(request))
+    if brief is None:
+        raise HTTPException(status_code=404)
+    if not isinstance(brief.piece, dict):
+        return RedirectResponse(f"/content/{brief_id}", status_code=303)
+    return _render("content_piece.html", request, **_brief_detail_ctx(request, brief))
+
+
 # --- run & revise -------------------------------------------------------
 
 
@@ -380,7 +393,7 @@ async def brief_run(request: Request, brief_id: str):
     data = _content_team.build_input(**brief_kwargs(brief))
     if request.app.state.stub_runs:
         return _render(
-            "content_brief_detail.html", request,
+            "content_piece.html", request,
             **_brief_detail_ctx(
                 request, brief,
                 piece={"stub": True},
@@ -424,7 +437,7 @@ async def brief_send_back(request: Request, brief_id: str):
     )
     if request.app.state.stub_runs:
         return _render(
-            "content_brief_detail.html", request,
+            "content_piece.html", request,
             **_brief_detail_ctx(
                 request, brief,
                 piece={"stub": True},

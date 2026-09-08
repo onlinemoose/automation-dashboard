@@ -1,9 +1,22 @@
 {% extends "base.html" %}
 {% block title %}{{ brief.title }} — Content briefs{% endblock %}
 {% block main %}
+{% set icon_piece %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+  <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+  <line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+</svg>
+{% endset %}
 <section class="panel">
   <p class="crumb"><a href="/content">&larr; Content briefs</a></p>
   <h1>{{ brief.title }}</h1>
+  {% if piece %}
+  <p class="toolbar">
+    <a class="iconbtn" href="/content/{{ brief.id }}/piece"
+       title="View the finished piece" aria-label="View the finished piece">{{ icon_piece }}</a>
+  </p>
+  {% endif %}
 
   {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
 
@@ -94,59 +107,14 @@
   </form>
 </section>
 
-{# --- run / piece --- #}
+{% if not piece %}
 <section class="panel">
-  {% if not piece %}
   <h2>Run the content team</h2>
   <p class="lede">Research → draft → edit → SEO review, looping until both gates pass.
     First runs take a few minutes — keep the tab open.</p>
   <form method="post" action="/content/{{ brief.id }}/run">
     <button type="submit">Run the content team</button>
   </form>
-  {% else %}
-  {% include "_content_result_panel.html" %}
-
-  <div class="panel">
-    <h2>Send back to the content team</h2>
-    <p class="help">One instruction per line. The team revises the current piece, reusing
-      the existing research and SEO brief.</p>
-    <form method="post" action="/content/{{ brief.id }}/send-back">
-      <div class="field">
-        <label for="notes">Notes</label>
-        <textarea id="notes" name="notes" rows="5"
-                  placeholder="tighten the open&#10;cut the third example&#10;less breathless in the middle"></textarea>
-      </div>
-      <div class="field">
-        <label for="quote">Quote a passage (optional)</label>
-        <textarea id="quote" name="quote" rows="2"
-                  placeholder="paste the exact passage a note is about"></textarea>
-        <input type="text" id="quote_comment" name="quote_comment" placeholder="what to change about it">
-      </div>
-      <button type="submit">Send back for revision</button>
-    </form>
-  </div>
-
-  <form method="post" action="/content/{{ brief.id }}/run" class="toolbar">
-    <button type="submit" class="button button--ghost">Run again from scratch</button>
-  </form>
-  {% endif %}
-</section>
-
-{% if runs %}
-<section class="panel">
-  <h2>Run history</h2>
-  <ol class="pagelist">
-    {% for run in runs | reverse %}
-    <li>
-      <span class="pagelist__title">{{ run.title or "(untitled)" }}</span>
-      <p class="pagelist__summary">
-        {{ run.saved_at }} ·
-        {% if run.approved %}approved{% else %}shipped flagged ({{ run.stopped_on }}){% endif %} ·
-        ${{ '%.4f' | format(run.cost_usd or 0) }}
-      </p>
-    </li>
-    {% endfor %}
-  </ol>
 </section>
 {% endif %}
 

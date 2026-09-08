@@ -25,11 +25,18 @@ the request and the result.
    contract has no progress callback, so it's a spinner, not a word
    count). On completion the finished **piece** is saved onto the brief
    and a **run summary** is appended to its history.
-4. The brief page now shows the piece: a **Publishing metadata** block
-   (title / excerpt / slug / tags, with a "shipped without full approval"
-   flag when `approved` is false), the editable **Final copy**, and the
-   read-only **SEO brief**, **Editor notes**, **SEO review notes**,
-   **Research notes** and **Revision history** sections.
+4. Once a brief has a saved piece, the brief detail page (`GET
+   /content/{id}`) carries only the Briefing form + Save brief — no run
+   panel, since a piece already exists. A file icon under the title (and
+   in the `/content` list row, in place of the earlier unstyled "piece
+   ready" text) opens the dedicated **piece page**
+   (`GET /content/{id}/piece`, redirects to the brief detail page if no
+   piece is saved yet): a **Publishing metadata** block (title / excerpt
+   / slug / tags, with a "shipped without full approval" flag when
+   `approved` is false), the editable **Final copy**, the read-only
+   **SEO brief**, **Editor notes**, **SEO review notes**, **Research
+   notes** and **Revision history** sections, plus **Send back to the
+   content team**, **Run again from scratch**, and the **Run history**.
 5. **Edit the piece two ways:**
    - **Edit draft** on the Final copy opens the span editor
      (`/content/drafts/{id}` — the same select → instruct → diff → accept

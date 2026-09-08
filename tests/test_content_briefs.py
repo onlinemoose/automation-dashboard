@@ -201,6 +201,50 @@ def test_foreign_brief_is_404_over_http(client: TestClient):
     assert client.get(f"/content/{brief.id}").status_code == 404
     assert client.post(f"/content/{brief.id}/run").status_code == 404
     assert client.post(f"/content/{brief.id}/send-back", data={"notes": "x"}).status_code == 404
+    assert client.get(f"/content/{brief.id}/piece").status_code == 404
+
+
+def test_piece_page_redirects_when_no_piece(client: TestClient):
+    brief = _make_brief()
+    r = client.get(f"/content/{brief.id}/piece", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/content/{brief.id}"
+
+
+def test_piece_page_shows_the_result_and_run_history(client: TestClient):
+    brief = _make_brief()
+    client.post(f"/content/{brief.id}/run")
+    r = client.get(f"/content/{brief.id}/piece")
+    assert r.status_code == 200
+    for heading in ("Publishing metadata", "Final copy", "Revision history"):
+        assert heading in r.text
+    assert "Send back to the content team" in r.text
+    assert "Run again from scratch" in r.text
+    assert "Run history" in r.text
+
+
+def test_detail_links_to_the_piece_page_once_a_piece_exists(client: TestClient):
+    brief = _make_brief()
+    before = client.get(f"/content/{brief.id}").text
+    assert f"/content/{brief.id}/piece" not in before
+    assert "Run history" not in before
+    assert "Send back to the content team" not in before
+
+    client.post(f"/content/{brief.id}/run")
+    after = client.get(f"/content/{brief.id}").text
+    assert f'href="/content/{brief.id}/piece"' in after
+    assert "Run history" not in after
+    assert "Send back to the content team" not in after
+
+
+def test_briefs_list_shows_the_piece_icon(client: TestClient):
+    with_piece = _make_brief(title="Has piece")
+    client.post(f"/content/{with_piece.id}/run")
+    without_piece = _make_brief(title="No piece")
+    body = client.get("/content").text
+    assert f'href="/content/{with_piece.id}/piece"' in body
+    assert f'href="/content/{without_piece.id}/piece"' not in body
+    assert 'class="pill"' not in body and "piece ready" not in body
 
 
 # --- running the team ----------------------------------------------
