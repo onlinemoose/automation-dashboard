@@ -1,0 +1,20 @@
+{# Final flush on success: the finished piece, a link back to the brief,
+   then the script that drops the "working" placeholder and the closing
+   tags _content_running_open.html left open. Needs: page, sections, meta,
+   brief_id. #}
+    <section class="panel">
+      <p class="crumb"><a href="/content/{{ brief_id }}">&larr; Back to the brief</a></p>
+      <p class="lede">The piece is saved on the brief — re-open it any time to edit a
+        span or send it back to the team.</p>
+    </section>
+    {% include "_content_result_panel.html" %}
+    <script>
+      (function () {
+        if (window.__stopProgress) window.__stopProgress();
+        var w = document.getElementById("working");
+        if (w) w.remove();
+      })();
+    </script>
+  </main>
+</body>
+</html>

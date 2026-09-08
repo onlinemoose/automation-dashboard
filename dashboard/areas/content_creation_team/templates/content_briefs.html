@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Content briefs — Automation Dashboard{% endblock %}
+{% block main %}
+{% set icon_trash %}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+{% endset %}
+<section class="panel">
+  <p class="crumb"><a href="/">&larr; All capabilities</a></p>
+  <h1>Content briefs</h1>
+  <p class="lede">
+    Write the goal and the brief once, set the length and house style, then run the
+    content team — it researches, drafts, edits and SEO-reviews one finished
+    piece. The piece is saved on the brief; edit a span or send it back to the
+    team from there.
+  </p>
+
+  <p class="toolbar"><a class="button" href="/content/new">New content brief</a></p>
+
+  {% if briefs %}
+  <ul class="pagelist pagelist--rows">
+    {% for brief in briefs %}
+    <li>
+      {% set words = brief.goal.split() %}
+      <div class="pagelist__body">
+        <a href="/content/{{ brief.id }}"><span class="pagelist__title">{{ brief.title }}</span></a>
+        <p class="pagelist__summary">
+          {{ words[:20] | join(" ") }}{% if words | length > 20 %}…{% endif %}
+        </p>
+      </div>
+      <div class="pagelist__actions">
+        {% if brief.piece %}<span class="pill" title="A finished piece is saved on this brief">piece ready</span>{% endif %}
+        <form method="post" action="/content/{{ brief.id }}/delete"
+              onsubmit="return confirm('Delete “{{ brief.title }}”?')">
+          <button type="submit" class="iconbtn iconbtn--danger"
+                  title="Delete content brief" aria-label="Delete content brief">{{ icon_trash }}</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="hint">No content briefs yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

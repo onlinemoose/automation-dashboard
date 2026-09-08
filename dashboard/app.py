@@ -9,7 +9,6 @@ See `docs/BACKGROUND_DOCUMENTS.md` and `docs/JOB_POSTS.md`.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -36,7 +35,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from dashboard import _auth, _documents, _drafts, _job_analysis, _jobs, _targeted_edit
 from dashboard._auth import is_authed
 from dashboard._render import to_html
-from dashboard.pages import PAGES_BY_SLUG
+from dashboard._streaming import stream_run
+from dashboard.pages import AREAS, PAGES_BY_SLUG
 from dashboard.pages._spec import FormError, Page, RunMeta, Section
 
 _HERE = Path(__file__).resolve().parent
@@ -44,11 +44,6 @@ _TEMPLATES = _HERE / "templates"
 _STATIC = _HERE / "static"
 
 _log = logging.getLogger("dashboard")
-
-# A `slow=True` page streams its result: flush a holding view now, then a
-# keepalive comment every few seconds until `run()` returns. Anything well
-# under a hosting proxy's response timeout (Render's is ~100s) works.
-_KEEPALIVE_SECONDS = 15
 
 
 def _resolve_span(
@@ -75,7 +70,7 @@ def _asset_version() -> str:
     """Short hash of the static assets, appended as `?v=` to their URLs so
     a browser fetches the new file after a deploy instead of a stale cache."""
     h = hashlib.sha1()
-    for name in ("app.css", "draft-edit.js"):
+    for name in ("app.css", "draft-edit.js", "content-draft-edit.js"):
         try:
             h.update((_STATIC / name).read_bytes())
         except OSError:
@@ -237,12 +232,23 @@ def create_app(
     )
     app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
+    # Product areas — each contributes an APIRouter under its own path
+    # prefix (docs/AREAS.md). The page registry already folded their
+    # pages into PAGES; this mounts their routes.
+    for area in AREAS:
+        app.include_router(area.router)
+
     templates = Jinja2Templates(directory=str(_TEMPLATES))
     templates.env.filters["markdown"] = to_html
     templates.env.filters["thousands"] = lambda n: f"{int(n):,}"
     templates.env.filters["usd4"] = lambda n: f"${float(n):.4f}"
     templates.env.globals["stub_runs"] = app.state.stub_runs
     templates.env.globals["asset_v"] = _asset_version()
+    # Every area's topbar link (label, href) pairs, and the areas
+    # themselves for the index cards — the shell templates iterate these
+    # so no area name is hard-coded in base.html / index.html.
+    templates.env.globals["area_nav"] = [nl for a in AREAS for nl in a.nav]
+    templates.env.globals["areas"] = AREAS
 
     def render(name: str, request: Request, /, status_code: int = 200, **ctx):
         # Every page's topbar shows who is signed in — inject it once here
@@ -326,82 +332,20 @@ def create_app(
         job_post_id: str | None = None,
         user_id: str | None = None,
     ) -> StreamingResponse:
-        """The result of a `slow=True` page, streamed.
-
-        Flush the holding view straight away, then — while `run()` works in
-        a worker thread — trickle out progress: a `window.__progress(...)`
-        script per update for a `progress=True` page (bridged from the
-        thread via `loop.call_soon_threadsafe`), or a bare keepalive
-        comment otherwise. Finish with the real result markup plus a
-        script that swaps it in. The first byte lands in well under a
-        second, so a hosting proxy's time-to-first-byte / idle timeout
-        can't kill a call that takes minutes. Headers are already sent by
-        the time `run()` could fail, so a failure is rendered into the
-        body, not as a 5xx.
-        """
-        tpl = templates.get_template
-        # These three render outside `render()`, so the topbar's signed-in
-        # email has to be passed in by hand.
-        user_email = u.email if (u := _auth.current_user(request)) else None
-
-        async def body():
-            yield tpl("_running_open.html").render(page=page, user_email=user_email)
-
-            loop = asyncio.get_running_loop()
-            updates: asyncio.Queue[int] = asyncio.Queue()
-
-            def on_progress(p: object) -> None:  # called from the worker thread
-                loop.call_soon_threadsafe(updates.put_nowait, getattr(p, "words", 0))
-
-            def call() -> object:
-                if page.progress:
-                    return page.run(data, on_progress=on_progress)
-                return page.run(data)
-
-            task = asyncio.ensure_future(run_in_threadpool(call))
-
-            while not task.done():
-                getter = asyncio.ensure_future(updates.get())
-                done, _ = await asyncio.wait(
-                    {getter, task}, timeout=_KEEPALIVE_SECONDS,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                if getter in done:
-                    words = getter.result()
-                    while not updates.empty():  # coalesce a backlog, emit the latest
-                        words = updates.get_nowait()
-                    yield f"<script>window.__progress&&window.__progress({words})</script>\n"
-                else:
-                    getter.cancel()
-                    if task not in done:
-                        yield "<!-- working -->\n"
-
-            try:
-                output = task.result()
-            except Exception as exc:  # noqa: BLE001 - any run() failure, shown in the body
-                _log.exception("slow page %s: run() failed", page.slug)
-                yield tpl("_running_error.html").render(
-                    page=page, error=type(exc).__name__, user_email=user_email,
-                )
-                return
-            if page.saved_result_slot and job_post_id and user_id:
-                try:
-                    await run_in_threadpool(
-                        _save_result, page, job_post_id, user_id, output
-                    )
-                except Exception:  # noqa: BLE001 - saving must not sink the result
-                    _log.exception("slow page %s: saving the result failed", page.slug)
-            meta = page.run_meta(output) if page.run_meta else None
-            yield tpl("_running_close.html").render(
-                page=page, sections=page.sections(output), meta=meta,
-                user_email=user_email, job_post_id=job_post_id,
+        """The result of a `slow=True` writer page, streamed — a thin wrap
+        of the shared `dashboard._streaming.stream_run`. A finished run is
+        saved against its job post's result slot on the way out."""
+        on_complete = None
+        if page.saved_result_slot and job_post_id and user_id:
+            on_complete = lambda output: _save_result(  # noqa: E731
+                page, job_post_id, user_id, output
             )
-
-        return StreamingResponse(
-            body(),
-            media_type="text/html; charset=utf-8",
-            # ask intermediate proxies not to buffer the trickle
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        user_email = u.email if (u := _auth.current_user(request)) else None
+        return stream_run(
+            request, templates, page, data,
+            user_email=user_email,
+            on_complete=on_complete,
+            context={"job_post_id": job_post_id},
         )
 
     @app.get("/p/{slug}", response_class=HTMLResponse)

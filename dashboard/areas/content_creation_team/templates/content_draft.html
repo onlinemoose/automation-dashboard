@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Editing the piece — Automation Dashboard{% endblock %}
+{% block main %}
+<section class="panel draft"
+         data-draft-id="{{ draft.id }}"
+         data-revision-count="{{ draft.revisions | length }}"
+         data-capability="{{ capability }}"
+         data-capability-version="{{ capability_version }}">
+  <p class="crumb">
+    <a href="{% if draft.content_brief_id %}/content/{{ draft.content_brief_id }}{% else %}/content{% endif %}">&larr; Back to the brief</a>
+  </p>
+  <h1>Editing the piece</h1>
+  <p class="lede">
+    Edit the text directly, or select a span and tell the editor what to
+    change — it revises just that span. Either way, <strong>Undo last</strong>
+    reverts the change and <strong>Download .md</strong> saves what's on screen.
+  </p>
+
+  <div class="draft__toolbar">
+    <a class="button button--ghost" href="/content/drafts/{{ draft.id }}/download">Download .md</a>
+  </div>
+
+  {# The newline right after <pre> is swallowed by the browser (HTML rule),
+     so a draft whose text itself starts with a newline still lines up 1:1
+     with the character offsets the editor computes. Keep it. #}
+  <pre class="draft__doc" id="draft-doc" contenteditable="true" spellcheck="true">
+{{ draft.current }}</pre>
+  <p class="error" id="draft-doc-error" hidden></p>
+
+  {% if draft.content_brief_id %}
+  <form class="draft__save" method="post"
+        action="/content/drafts/{{ draft.id }}/save" id="draft-save-form">
+    <button type="submit" class="button">Save to brief</button>
+  </form>
+  {% endif %}
+
+  <button type="button" class="draft__revise-btn" id="draft-revise-btn" hidden>Revise…</button>
+
+  <div class="draft__work" id="draft-work" role="dialog" aria-labelledby="draft-work-title" hidden>
+    <div class="draft__work-head">
+      <h2 id="draft-work-title">Revise this span</h2>
+      <button type="button" class="draft__close" id="draft-close" aria-label="Close">&times;</button>
+    </div>
+    <blockquote class="draft__selection" id="draft-selection"></blockquote>
+
+    <div id="draft-ask">
+      <label for="draft-instruction">What should change?</label>
+      <textarea id="draft-instruction" rows="4"
+                placeholder="e.g. make this more concrete · drop the second sentence · less breathless"></textarea>
+      <div class="draft__actions">
+        <button type="button" id="draft-propose">Propose revision</button>
+        <button type="button" class="button--ghost" id="draft-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <div id="draft-proposal" hidden>
+      <p class="draft__diff-label">Proposed change</p>
+      <p class="draft__diff" id="draft-diff"></p>
+      <p class="draft__note" id="draft-note"></p>
+      <div class="draft__actions">
+        <button type="button" id="draft-accept">Accept</button>
+        <button type="button" class="button--ghost" id="draft-retry">Retry</button>
+        <button type="button" class="button--ghost button--danger" id="draft-reject">Reject</button>
+      </div>
+      <footer class="runmeta" id="draft-runmeta" hidden>
+        <span class="runmeta__cost"><span id="draft-cost">$0.0000</span> <span class="runmeta__est">est.</span></span>
+        <span class="runmeta__tokens" id="draft-tokens"></span>
+        <span class="runmeta__src">{{ capability }} {{ capability_version }}</span>
+      </footer>
+    </div>
+
+    <p class="error" id="draft-error" hidden></p>
+    <p class="draft__busy" id="draft-busy" hidden>Revising… this can take up to a minute.</p>
+  </div>
+
+  <div class="draft__history-wrap" id="draft-history-wrap" {% if not draft.revisions %}hidden{% endif %}>
+    <h2>History</h2>
+    <button type="button" id="draft-undo" {% if not draft.revisions %}disabled{% endif %}>Undo last</button>
+    <ol class="draft__history" id="draft-history">
+      {% for rev in draft.revisions %}
+      <li>
+        <span class="draft__history-instruction">{{ rev.instruction }}</span>
+        {% if rev.note %}<span class="draft__history-note">{{ rev.note }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+</section>
+<script src="/static/content-draft-edit.js?v={{ asset_v }}"></script>
+{% endblock %}

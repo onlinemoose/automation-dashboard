@@ -92,10 +92,12 @@ adapters, routes, templates, and docs. **Areas never import each other.**
 | Area | Entry | Owns |
 |---|---|---|
 | **Job Application Co-Pilot** | `/jobs` | `dashboard/pages/{cover_letter_writer,cv_writer}.py` (+ `pages/_examples/`), `dashboard/_{documents,jobs,drafts,job_analysis,targeted_edit}.py`, the `/documents* /jobs* /drafts*` route blocks in `app.py`, `templates/{jobs,job_form,job_detail,documents,document_form,draft}.html`, `static/draft-edit.js`, `docs/{JOB_POSTS,DRAFTS,BACKGROUND_DOCUMENTS}.md`, `tests/test_{jobs,drafts,documents}.py`. Capabilities: cover-letter-writer, cv-writer, job-analyst, targeted-editor. |
+| **Content Creation Team** | `/content` | `dashboard/areas/content_creation_team/**` (self-contained: `pages/`, `_briefs.py`, `_content_team.py`, `_content_drafts.py`, `_content_targeted_edit.py`, `routes.py`, `templates/`, `docs/CONTENT_BRIEFS.md`, nested `CLAUDE.md`), `static/content-draft-edit.js`, `tests/test_content_{briefs,drafts}.py`. Capabilities: content-creation-team, targeted-editor. |
 
 **Shell** (shared; every area depends on it, it depends on no area):
-`app.py` routing skeleton + `/p/{slug}` + streaming, `_auth.py`,
-`_render.py`, `pages/_spec.py`, `pages/__init__.py`,
+`app.py` routing skeleton + `/p/{slug}` + area-router mount, `_auth.py`,
+`_render.py` (+ `make_templates`), `_streaming.py` (`stream_run`),
+`pages/_spec.py` (+ `Area`), `pages/__init__.py`, `areas/__init__.py`,
 `templates/{base,login,index,page,result,_result_panel,_running_*}.html`,
 `static/app.css`, `docs/{EXPERIENCE,DEPLOY,DEPLOYMENT_CHECKLIST,USER_SCOPING}.md`,
 `tests/test_{pages,auth,auth_backend,guardrails}.py`.
@@ -125,16 +127,20 @@ dashboard/
   _job_analysis.py     adapter for the job-analyst capability + emphasis format/parse
   _drafts.py           the app's own Working drafts store + apply_revision / undo-by-replay
   _targeted_edit.py    adapter for the targeted-editor capability (span revision)
-  _render.py           capability Markdown output -> HTML
+  _render.py           capability Markdown output -> HTML; make_templates (shell + area Jinja)
+  _streaming.py        stream_run: the holding view + keepalive for a slow page (shell)
   hashpw.py            `python -m dashboard.hashpw` -> a password hash for .env
   pages/
-    _spec.py           Page, Field, Section, RunMeta, FormReader, FormError — the page contract
-    __init__.py        PAGES registry
+    _spec.py           Page, Field, Section, RunMeta, Area, FormReader, FormError — the contract
+    __init__.py        PAGES registry + AREAS (folds each area's page_specs in)
     cover_letter_writer.py   page for the cover-letter-writer capability
+  areas/
+    content_creation_team/   the Content Creation Team area (entry /content) — see its CLAUDE.md
   templates/           base, login, index, page (generic form), result, documents,
                        jobs (job posts area), draft (span-revision editor)
   static/app.css       plain, restyle to taste
   static/draft-edit.js select -> instruct -> diff -> accept, for the draft editor
+  static/content-draft-edit.js   the same, for the Content Creation Team area
 docs/
   EXPERIENCE.md        the rules in prose + "Adding a page" walk-through
   BACKGROUND_DOCUMENTS.md   the app-owned Background documents store

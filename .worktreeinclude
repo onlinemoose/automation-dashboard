@@ -1,0 +1,4 @@
+# Copied (not symlinked) from the main repo into any new worktree, so the
+# app can run there without re-entering secrets. See CLAUDE.md rule 7:
+# ".env is gitignored" — this is how a worktree still gets one.
+.env

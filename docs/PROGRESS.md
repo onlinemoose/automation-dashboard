@@ -3,6 +3,77 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-06 — New area: Content Creation Team (first `dashboard/areas/` slice)
+
+Wraps the `content-creation-team` capability (pinned `v0.1.0` = `dbe01a8`
+via `uv add`): given a goal + brief it researches, drafts, edits and
+SEO-reviews one finished piece of copy. Entry `/content`.
+
+**First-area shell plumbing** (composition roots + leaf modules + three
+templates only — **no Job Application file touched**):
+
+- `Area` dataclass in `dashboard/pages/_spec.py` (`router` typed under
+  `TYPE_CHECKING`). `dashboard/pages/__init__.py` gains
+  `AREAS = (CONTENT_CREATION_TEAM,)` and folds `*chain.from_iterable(
+  a.page_specs …)` into `PAGES`. `dashboard/app.py` gains
+  `for area in AREAS: app.include_router(area.router)` and the
+  `area_nav` / `areas` Jinja globals.
+- `_streamed_result` generalised into `dashboard/_streaming.stream_run(
+  request, templates, page, data, *, on_complete=None, context=None,
+  template_*=…)` — a new leaf shell module; `_streamed_result` is now a
+  6-line wrapper (Job-app call site behaviour unchanged). Serves the
+  future Job-app route extraction too.
+- `dashboard/_render.make_templates(*extra_dirs)` shares the Jinja
+  filters + `asset_v` global between `create_app` and the area.
+- `base.html` / `index.html` / `_running_open.html` iterate `area_nav`
+  / `areas` — no area name hard-coded in the shell.
+- `dashboard/areas/__init__.py` added (a real package, in `SHELL_MODULES`).
+
+**The area** — `dashboard/areas/content_creation_team/`: `_briefs.py`
+(Content briefs store: goal + brief + knobs + `piece` jsonb + `runs`
+summaries), `_content_team.py` (the capability adapter), `_content_drafts.py`
++ `_content_targeted_edit.py` (a self-contained copy of the span-editor
+subsystem, `targeted-editor` capability), `pages/content_creation_team.py`
+(`slow=True`, **`progress=False`** — no `on_progress` in the contract;
+every `Output` field mapped to a Section, incl. the "shipped without full
+approval" flag; `saved_result_slot=None`), `routes.py` (an `APIRouter`:
+briefs CRUD, run-from-brief with a streamed holding view + piece
+persistence, **"Send back to the content team"** re-running with
+`previous_draft` + `previous_feedback` + resumed `research_notes` /
+`seo_brief`, and the `/content/drafts*` span routes), templates, and
+`docs/CONTENT_BRIEFS.md`.
+
+- **house_style** is a free-text field on the brief — reusing the
+  Background documents store would force a forbidden cross-area import.
+- **No `tone` field.** The contract has an optional `tone`, but the
+  dashboard doesn't surface it: it overlapped `house_style` and the voice
+  cues already in the capability's stage prompts. `build_input` never
+  sets it (capability default `None`). Dropped from the brief form, the
+  `/p/` page, the `content_briefs` store + migration, and the adapter.
+- Migration `docs/migrations/2026-09-06_content_creation_team.sql`
+  (`content_briefs` + `content_drafts`), run by hand.
+- Guardrail: manifest entry + `dashboard._streaming` / `dashboard.areas`
+  in `SHELL_MODULES` + new `test_area_routers_declare_exactly_their_
+  manifest_routes` (an area's `APIRouter` routes aren't visible to the
+  app.py route parser). Draft routes are registered before the
+  `/content/{brief_id}` routes so `POST /content/drafts` isn't captured.
+- Tests: `tests/test_content_{briefs,drafts}.py`; `tests/test_pages.py`
+  auto-covers the page. `uv run pytest` (189 pass, 3 skip) and
+  `uv run lint-imports` green.
+
+**Operator setup still pending (out of band):**
+
+- Add `onlinemoose/content-creation-team` to the Render deploy `GH_TOKEN`
+  fine-grained PAT repo list **and** the Claude GitHub App grant for
+  `onlinemoose`, or `uv sync --frozen` fails at deploy with a git-auth
+  error (same failure mode as 2026-09-01).
+- Run the migration in the Supabase SQL editor.
+
+**Deferred:** richer send-back UI (repeated rows with per-note quoted
+spans); a shared shell "span editor" + a "style library" once a third
+area wants them; storing full per-round drafts (only run *summaries* are
+kept).
+
 ## 2026-09-02 — Analyse persists the job-post summary immediately
 
 The `/jobs/{id}/analyse` handler already wrote `emphasis`, `company` and

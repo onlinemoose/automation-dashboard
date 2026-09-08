@@ -35,11 +35,19 @@ nothing else changes.
 - [x] Compute: **Free**.
 - [x] Health Check Path: `/health`. Auto-deploy on `main`: on (confirmed
       — the threadpool fix deployed on push).
-- [x] **Private capability repo** (`cover-letter-writer`): fine-grained
-      GitHub PAT (Contents: Read-only) as env var `GH_TOKEN` + the
-      `git config … insteadOf` prefix in the build command. **PAT expires
-      ≤1 year — rotating it is a recurring task** (same build error
-      returns when it lapses).
+- [x] **Private capability repos**: fine-grained GitHub PAT (Contents:
+      Read-only) as env var `GH_TOKEN` + the `git config … insteadOf`
+      prefix in the build command. **PAT expires ≤1 year — rotating it is
+      a recurring task** (same build error returns when it lapses).
+      **Every new private capability repo must be added to the PAT's
+      repository-access list** (and the Claude GitHub App grant for
+      `onlinemoose`), or `uv sync --frozen` fails at deploy with a git
+      auth error.
+- [ ] **`content-creation-team`** (added 2026-09-06): add
+      `onlinemoose/content-creation-team` to the `GH_TOKEN` PAT repo list
+      and the Claude GitHub App grant. Run
+      `docs/migrations/2026-09-06_content_creation_team.sql` in the
+      Supabase SQL editor (`content_briefs` + `content_drafts`).
 - [x] Secret env vars set by hand: `SESSION_SECRET` (fresh, via Render's
       Generate), `DASHBOARD_PASSWORD_HASH`, `ANTHROPIC_API_KEY`,
       `GH_TOKEN`. `DASHBOARD_HTTPS=1`.

@@ -19,8 +19,9 @@ other" a failing test rather than a code-review note.
 
 | Bucket | Owns |
 |---|---|
-| **Shell** | `dashboard/app.py` (routing skeleton, `/p/{slug}`, streaming, `create_app`), `dashboard/_auth.py`, `dashboard/_render.py`, `dashboard/pages/_spec.py`, `dashboard/pages/__init__.py`, `dashboard/hashpw.py`, `templates/{base,login,index,page,result,_result_panel,_running_*}.html`, `static/app.css`, `docs/{EXPERIENCE,DEPLOY,DEPLOYMENT_CHECKLIST,USER_SCOPING,AREAS}.md`, `tests/test_{pages,auth,auth_backend,guardrails}.py`. |
+| **Shell** | `dashboard/app.py` (routing skeleton, `/p/{slug}`, `create_app`), `dashboard/_auth.py`, `dashboard/_render.py` (incl. `make_templates`), `dashboard/_streaming.py` (`stream_run`), `dashboard/pages/_spec.py` (incl. `Area`), `dashboard/pages/__init__.py`, `dashboard/areas/__init__.py`, `dashboard/hashpw.py`, `templates/{base,login,index,page,result,_result_panel,_running_*}.html` (the nav in `base`/`index`/`_running_open` iterates `area_nav` / `areas`), `static/app.css`, `docs/{EXPERIENCE,DEPLOY,DEPLOYMENT_CHECKLIST,USER_SCOPING,AREAS}.md`, `tests/test_{pages,auth,auth_backend,guardrails}.py`. |
 | **Job Application Co-Pilot** (entry `/jobs`) | `dashboard/pages/{cover_letter_writer,cv_writer}.py` (+ `dashboard/pages/_examples/`), `dashboard/_{documents,jobs,drafts,job_analysis,targeted_edit}.py`, the `/documents* /jobs* /drafts*` route blocks in `app.py`, `templates/{jobs,job_form,job_detail,documents,document_form,draft}.html`, `static/draft-edit.js`, `docs/{JOB_POSTS,DRAFTS,BACKGROUND_DOCUMENTS}.md`, `tests/test_{jobs,drafts,documents}.py`. Capabilities: cover-letter-writer, cv-writer, job-analyst, targeted-editor. |
+| **Content Creation Team** (entry `/content`) | `dashboard/areas/content_creation_team/**` — self-contained: `pages/content_creation_team.py` (+ `pages/_examples/`), `_briefs.py`, `_content_team.py`, `_content_drafts.py`, `_content_targeted_edit.py`, `routes.py` (`APIRouter`, `/content*`), `templates/`, `docs/CONTENT_BRIEFS.md`, nested `CLAUDE.md`. Also `static/content-draft-edit.js` (in `dashboard/static/`, the single mount). `tests/test_content_{briefs,drafts}.py`. Capabilities: content-creation-team, targeted-editor. |
 
 The single source of truth for the module- and route-level boundary is the
 **area manifest** in `tests/test_guardrails.py` (`SHELL_MODULES`,
@@ -40,6 +41,20 @@ the runtime.
 - `test_every_route_belongs_to_shell_or_one_area` — `ALLOWED_ROUTES` is
   the shell's routes plus each area's, kept disjoint; a new route in
   `app.py` must be claimed by exactly one area.
+
+## The recipe is live
+
+**Content Creation Team** (2026-09-06) is the first area built under
+`dashboard/areas/`, so it also landed the one-time shell plumbing the
+recipe below assumes: the `Area` dataclass (`dashboard/pages/_spec.py`),
+the `AREAS` list + `chain.from_iterable` fold-in
+(`dashboard/pages/__init__.py`), the `app.include_router` loop
+(`dashboard/app.py`), the `area_nav` / `areas` template globals, and
+`dashboard/_streaming.stream_run` (the old `create_app`-nested
+`_streamed_result`, generalised so an area's own run route can stream a
+`slow` page — it takes the holding/close/error template names and an
+`on_complete` save callback). Adding the **next** area is just the
+recipe — no shell plumbing.
 
 ## Job Application stays flat for now
 

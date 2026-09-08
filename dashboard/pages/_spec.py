@@ -22,6 +22,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastapi import APIRouter
 
 # Widgets the generic form renderer knows how to draw.
 #   "text"      - single-line input
@@ -130,6 +134,25 @@ class Page:
     # result in place of a blank form — `?rerun=1` forces the form. Pages
     # not driven by a job post leave this None. See docs/JOB_POSTS.md.
     saved_result_slot: str | None = None
+
+
+@dataclass(frozen=True)
+class Area:
+    """One product area, folded into the shell by the composition roots.
+
+    The dashboard is one deployable but many self-contained slices
+    (docs/AREAS.md). `dashboard/pages/__init__.py` folds every area's
+    `page_specs` into `PAGES`; `dashboard/app.py` mounts every area's
+    `router`. Both templates' nav and the index read `nav`. The manifest
+    in `tests/test_guardrails.py` mirrors `name` and `allowed_routes`.
+    """
+
+    name: str  # matches the guardrail manifest key, e.g. "content_creation_team"
+    router: "APIRouter"  # every route this area declares
+    nav: tuple[tuple[str, str], ...]  # (label, href) pairs for the topbar + index
+    page_specs: tuple["Page", ...]  # Page objects to fold into PAGES
+    allowed_routes: frozenset[str]  # mirrors the manifest 'routes' set
+    summary: str = ""  # one line for the index card
 
 
 class FormReader:
