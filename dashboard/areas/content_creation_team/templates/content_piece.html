@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ brief.title }} — the piece{% endblock %}
+{% block main %}
+<section class="panel">
+  <p class="crumb"><a href="/content/{{ brief.id }}">&larr; {{ brief.title }}</a></p>
+  <h1>{{ brief.title }} — the piece</h1>
+</section>
+
+{% include "_content_result_panel.html" %}
+
+<div class="panel">
+  <h2>Send back to the content team</h2>
+  <p class="help">One instruction per line. The team revises the current piece, reusing
+    the existing research and SEO brief.</p>
+  <form method="post" action="/content/{{ brief.id }}/send-back">
+    <div class="field">
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes" rows="5"
+                placeholder="tighten the open&#10;cut the third example&#10;less breathless in the middle"></textarea>
+    </div>
+    <div class="field">
+      <label for="quote">Quote a passage (optional)</label>
+      <textarea id="quote" name="quote" rows="2"
+                placeholder="paste the exact passage a note is about"></textarea>
+      <input type="text" id="quote_comment" name="quote_comment" placeholder="what to change about it">
+    </div>
+    <button type="submit">Send back for revision</button>
+  </form>
+</div>
+
+<form method="post" action="/content/{{ brief.id }}/run" class="toolbar">
+  <button type="submit" class="button button--ghost">Run again from scratch</button>
+</form>
+
+{% if runs %}
+<section class="panel">
+  <h2>Run history</h2>
+  <ol class="pagelist">
+    {% for run in runs | reverse %}
+    <li>
+      <span class="pagelist__title">{{ run.title or "(untitled)" }}</span>
+      <p class="pagelist__summary">
+        {{ run.saved_at }} ·
+        {% if run.approved %}approved{% else %}shipped flagged ({{ run.stopped_on }}){% endif %} ·
+        ${{ '%.4f' | format(run.cost_usd or 0) }}
+      </p>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+{% endblock %}
