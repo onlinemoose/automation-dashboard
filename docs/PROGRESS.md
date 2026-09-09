@@ -3,6 +3,18 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-09 — Bump content-creation-team pin v0.1.0 -> v0.2.0
+
+`uv add` rev `v0.1.0` (`dbe01a8`) -> `v0.2.0` (`71054e2`) + `uv lock`.
+`_contract.py` is byte-identical between the two tags, so `Input`/`Output`
+are unchanged and the Content Creation Team page needs no edit; v0.2.0 is
+internal only (`_core.py` state machine, scoped SEO check, style flags,
+prompt revisions). `uv run pytest` green, `uv run lint-imports` clean.
+
+Unblocks the Render deploy, which also needs `onlinemoose/content-creation-team`
+added to the fine-grained `GH_TOKEN` PAT's repo allowlist (was 403ing on
+the clone regardless of pin).
+
 ## 2026-09-08 — Content Creation Team: the piece behind an icon
 
 A brief's detail page now holds only the Briefing form + Save brief, plus
