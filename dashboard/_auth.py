@@ -1,9 +1,10 @@
 """Session auth, backed by Supabase Auth.
 
 Sign-in is email + password against Supabase Auth (the *anon* key, not
-the service key); a valid login puts `{"id", "email"}` into the signed
-session cookie, which stays the session of record. Every row the app
-stores is scoped to that id — see `docs/USER_SCOPING.md`.
+the service key); a valid login puts `{"id", "email", "areas"}` into the
+signed session cookie, which stays the session of record. Every row the
+app stores is scoped to that id — see `docs/USER_SCOPING.md`. `areas` is
+which product areas this user may reach — see `docs/ACCESS.md`.
 
 When `SUPABASE_ANON_KEY` is blank the module falls back to an offline
 backend that checks the submitted email against `DASHBOARD_DEV_EMAIL` and
@@ -79,10 +80,34 @@ class AuthedUser:
 
     The id is what every app-owned row is scoped by, so it is the one
     field the stores care about.
+
+    `areas` is which product areas (docs/ACCESS.md) this user may reach:
+    `None` means unrestricted (every area — the default, and the only
+    value before this feature existed), a tuple is the allowed area keys,
+    and `()` means none. Resolved once at sign-in from Supabase
+    `app_metadata` (or `DASHBOARD_DEV_AREAS` offline) and carried in the
+    session cookie — a change in Supabase takes effect on next login.
     """
 
     id: str
     email: str
+    areas: tuple[str, ...] | None = None
+
+
+def areas_from_metadata(md: object) -> tuple[str, ...] | None:
+    """`app_metadata["areas"]` normalised. Missing / not a dict / null ->
+    None (unrestricted). A list or single string -> tuple of str. `[]` ->
+    `()` (no areas)."""
+    if not isinstance(md, dict):
+        return None
+    raw = md.get("areas")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        return None
+    return tuple(str(a) for a in raw)
 
 
 class _AuthBackend(Protocol):
@@ -109,7 +134,15 @@ class _MemoryAuthBackend:
             return None
         if not verify_password(password, expected_hash):
             return None
-        return AuthedUser(id=self.ID, email=expected_email)
+        # Parallel source to Supabase app_metadata, for offline/dev logins:
+        # unset -> every area, set-but-empty -> none.
+        raw = os.environ.get("DASHBOARD_DEV_AREAS")
+        areas = (
+            tuple(s.strip() for s in raw.split(",") if s.strip())
+            if raw is not None
+            else None
+        )
+        return AuthedUser(id=self.ID, email=expected_email, areas=areas)
 
 
 class _SupabaseAuthBackend:
@@ -128,7 +161,10 @@ class _SupabaseAuthBackend:
         user = getattr(res, "user", None)
         if user is None or not getattr(user, "id", None):
             return None
-        return AuthedUser(id=str(user.id), email=str(getattr(user, "email", "") or email))
+        areas = areas_from_metadata(getattr(user, "app_metadata", None))
+        return AuthedUser(
+            id=str(user.id), email=str(getattr(user, "email", "") or email), areas=areas
+        )
 
 
 _auth_backend_instance: _AuthBackend | None = None
@@ -169,15 +205,96 @@ def sign_in(email: str, password: str) -> AuthedUser | None:
     return _auth_backend().sign_in(email, password)
 
 
+# --- setting a password: invite & recovery ------------------------------
+#
+# An invited user (or one who forgot their password) arrives from a
+# Supabase Auth email link carrying a single-use `token_hash`. They set
+# their own password here; the admin never handles it. See
+# `docs/USER_SCOPING.md`. This path needs real Supabase Auth — the offline
+# dev backend has no tokens to verify.
+
+PASSWORD_SET_OTP_TYPES = ("invite", "recovery")
+
+
+class PasswordSetError(Exception):
+    """A `set_password` failure worth showing the user verbatim: the link
+    has expired or was already used, or the new password fails the
+    project's strength policy."""
+
+
+def supabase_auth_configured() -> bool:
+    """Whether real Supabase Auth is wired up (vs the offline dev login)."""
+    return bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_ANON_KEY"))
+
+
+def _fresh_supabase_client():
+    """A throwaway client for one verify -> update_user exchange. Not the
+    shared `_SupabaseAuthBackend` client: `verify_otp` mutates the
+    instance's session, and two people setting a password at the same time
+    must not share one."""
+    from supabase import create_client
+
+    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+
+
+def set_password(token_hash: str, otp_type: str, new_password: str) -> AuthedUser:
+    """Verify a Supabase invite / recovery `token_hash` and set the user's
+    password, returning them signed in.
+
+    Raises `PasswordSetError` for the two expected failures: an expired or
+    already-used link, and a password the project's policy rejects.
+    """
+    if otp_type not in PASSWORD_SET_OTP_TYPES:
+        raise PasswordSetError("This link is not one we can use.")
+    from supabase_auth.errors import AuthError, AuthWeakPasswordError
+
+    client = _fresh_supabase_client()
+    try:
+        client.auth.verify_otp({"token_hash": token_hash, "type": otp_type})
+    except Exception:  # noqa: BLE001 - gotrue error types vary by version
+        raise PasswordSetError(
+            "This link has expired or has already been used — request a new one."
+        ) from None
+    try:
+        res = client.auth.update_user({"password": new_password})
+    except AuthWeakPasswordError as exc:
+        raise PasswordSetError(str(exc) or "Choose a stronger password.") from None
+    except AuthError as exc:
+        raise PasswordSetError(str(exc) or "Could not set that password.") from None
+    except Exception:  # noqa: BLE001
+        raise PasswordSetError("Could not set that password.") from None
+    user = getattr(res, "user", None)
+    if user is None or not getattr(user, "id", None):
+        raise PasswordSetError("Could not set that password.")
+    areas = areas_from_metadata(getattr(user, "app_metadata", None))
+    return AuthedUser(
+        id=str(user.id), email=str(getattr(user, "email", "") or ""), areas=areas
+    )
+
+
+def send_recovery(email: str) -> None:
+    """Ask Supabase to email a password-recovery link. Best-effort and
+    silent: the caller must not learn whether `email` has an account."""
+    try:
+        _fresh_supabase_client().auth.reset_password_for_email(email)
+    except Exception:  # noqa: BLE001 - never signal whether the address exists
+        pass
+
+
 def current_user(request: Request) -> AuthedUser | None:
     """Who this request is from, read from the signed session cookie."""
     state = request.app.state
     if getattr(state, "auth_disabled", False):
         uid = getattr(state, "as_user", "test-user")
-        return AuthedUser(id=uid, email=f"{uid}@example.test")
+        areas = getattr(state, "as_areas", None)
+        return AuthedUser(id=uid, email=f"{uid}@example.test", areas=areas)
     stored = request.session.get("user")
     if isinstance(stored, dict) and stored.get("id"):
-        return AuthedUser(id=str(stored["id"]), email=str(stored.get("email") or ""))
+        raw_areas = stored.get("areas")
+        areas = tuple(raw_areas) if isinstance(raw_areas, list) else None
+        return AuthedUser(
+            id=str(stored["id"]), email=str(stored.get("email") or ""), areas=areas
+        )
     return None
 
 

@@ -108,6 +108,27 @@ This is the Supabase project **Phase 3 reuses** for real accounts.
 
 ---
 
+## Supabase Auth — invite & recovery email flow (needs console config)
+
+Accounts are invite-only and the invited user sets their own password at
+`/auth/set-password` (`docs/USER_SCOPING.md`). The default Supabase email
+links don't work with a server-rendered app — point them at this app:
+
+- [ ] **Authentication → Email Templates → Invite user**: link →
+      `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=invite`
+- [ ] **Authentication → Email Templates → Reset Password**: link →
+      `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=recovery`
+- [ ] **Authentication → URL Configuration → Site URL**: the Render origin
+      (`https://…onrender.com`); `http://127.0.0.1:8000` for local.
+- [ ] Smoke test: invite yourself → click the email link → set a password →
+      land signed in; then "Forgot your password?" → recovery email → set a
+      new one.
+- [ ] Built-in email is rate-limited (~2–4/hour) and not for production —
+      configure a custom SMTP provider (Resend / SendGrid / Postmark) in
+      **Authentication → Emails** before real use.
+
+---
+
 ## Phase 2 — Multi-user auth (Option B, not built yet)
 
 A shared password ships fine for a handful of trusted people. When more

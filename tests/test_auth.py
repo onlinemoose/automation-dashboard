@@ -104,3 +104,78 @@ def test_topbar_shows_signed_in_email(dev_login) -> None:
 def test_health_is_public() -> None:
     client = TestClient(create_app(auth_disabled=False))
     assert client.get("/health").json() == {"ok": True}
+
+
+# --- setting a password: invite & recovery -----------------------------
+# The Supabase happy path (verify_otp -> update_user) needs a live project
+# and is verified by hand, like the sign-in path (see test_auth_backend.py).
+# Here: the routes exist, are public, and degrade cleanly with no Supabase.
+
+
+@pytest.fixture
+def offline_auth(monkeypatch):
+    """No Supabase Auth configured — the invite/recovery flow is unavailable."""
+    monkeypatch.delenv("SUPABASE_ANON_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+
+
+def test_login_page_links_to_forgot_password() -> None:
+    client = TestClient(create_app(auth_disabled=False))
+    assert 'href="/auth/forgot"' in client.get("/login").text
+
+
+def test_login_and_forgot_pages_have_no_signup_link(offline_auth) -> None:
+    """Invite-only: neither page offers self-serve account creation."""
+    client = TestClient(create_app(auth_disabled=False))
+    for path in ("/login", "/auth/forgot"):
+        text = client.get(path).text.lower()
+        assert "sign up" not in text
+        assert "create account" not in text
+        assert "create an account" not in text
+
+
+def test_forgot_form_renders(offline_auth) -> None:
+    client = TestClient(create_app(auth_disabled=False))
+    resp = client.get("/auth/forgot")
+    assert resp.status_code == 200
+    assert 'name="email"' in resp.text
+
+
+def test_forgot_submit_is_generic_and_safe_offline(offline_auth) -> None:
+    client = TestClient(create_app(auth_disabled=False))
+    resp = client.post("/auth/forgot", data={"email": "whoever@example.com"})
+    assert resp.status_code == 200
+    assert "if that address has an account" in resp.text.lower()
+
+
+def test_set_password_form_rejects_an_unknown_type(offline_auth) -> None:
+    client = TestClient(create_app(auth_disabled=False))
+    resp = client.get(
+        "/auth/set-password", params={"type": "bogus", "token_hash": "x"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/login"
+
+
+def test_set_password_form_shows_unavailable_offline(offline_auth) -> None:
+    client = TestClient(create_app(auth_disabled=False))
+    resp = client.get(
+        "/auth/set-password", params={"type": "recovery", "token_hash": "x"}
+    )
+    assert resp.status_code == 200
+    # The "unavailable" branch: an explanation and a way back, no form.
+    assert 'type="password"' not in resp.text
+    assert 'action="/auth/set-password"' not in resp.text
+    assert 'href="/login"' in resp.text
+
+
+def test_set_password_submit_offline_does_not_error(offline_auth) -> None:
+    client = TestClient(create_app(auth_disabled=False))
+    resp = client.post(
+        "/auth/set-password",
+        data={"type": "invite", "token_hash": "x", "password": "a-good-password"},
+    )
+    assert resp.status_code == 400
+    assert 'type="password"' not in resp.text
+    assert 'action="/auth/set-password"' not in resp.text

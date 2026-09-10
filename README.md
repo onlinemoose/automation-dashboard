@@ -39,10 +39,11 @@ by the generic `GET`/`POST /p/{slug}` routes):
   `docs/DRAFTS.md`.
 
 **Accounts** — sign-in is email + password against **Supabase Auth**, and
-every stored row is scoped to the signed-in user. Public signup is off;
-operator accounts are created in the Supabase dashboard. How it works and
-the one-time migration: `docs/USER_SCOPING.md`,
-`docs/migrations/2026-09-01_user_scoping.sql`.
+every stored row is scoped to the signed-in user. Accounts are invite-only:
+an admin invites from the Supabase dashboard and the invited user sets their
+own password at `/auth/set-password` (there's a "Forgot your password?" flow
+too). Public signup is off. How it works and the one-time migration:
+`docs/USER_SCOPING.md`, `docs/migrations/2026-09-01_user_scoping.sql`.
 
 ---
 

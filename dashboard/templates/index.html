@@ -3,14 +3,10 @@
 <section class="panel">
   <h1>Capabilities</h1>
   <ul class="pagelist">
+    {% for a in area_nav | default([]) %}
     <li>
-      <a href="/jobs"><span class="pagelist__title">Job Application Co-Pilot</span></a>
-      <p class="pagelist__summary">Add a job post, analyse what the hiring manager is really weighing, annotate each point, then build a tailored application from it.</p>
-    </li>
-    {% for area in areas | default([]) %}
-    <li>
-      <a href="{{ area.nav[0][1] }}"><span class="pagelist__title">{{ area.nav[0][0] }}</span></a>
-      <p class="pagelist__summary">{{ area.summary }}</p>
+      <a href="{{ a.nav[0][1] }}"><span class="pagelist__title">{{ a.title }}</span></a>
+      <p class="pagelist__summary">{{ a.summary }}</p>
     </li>
     {% endfor %}
   </ul>

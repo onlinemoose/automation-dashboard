@@ -30,7 +30,7 @@ from fastapi.responses import (
 )
 from starlette.concurrency import run_in_threadpool
 
-from dashboard import _auth
+from dashboard import _access, _auth
 from dashboard._auth import is_authed
 from dashboard._render import make_templates
 from dashboard._streaming import stream_run
@@ -78,15 +78,14 @@ ROUTES = frozenset(
 )
 
 _templates = make_templates(_TEMPLATES_DIR)
-# Shown in the topbar of every area page. A one-area app knows its own nav;
-# revisit when a third area lands and the shell owns an area registry.
-_AREA_NAV = [("Content Creation Team", "/content")]
 
 
 def _guard(request: Request) -> RedirectResponse | None:
-    if is_authed(request):
-        return None
-    return RedirectResponse(f"/login?next={quote(request.url.path)}", status_code=303)
+    if not is_authed(request):
+        return RedirectResponse(f"/login?next={quote(request.url.path)}", status_code=303)
+    if not _access.can_access_path(_auth.current_user(request), request.url.path):
+        raise HTTPException(status_code=404)
+    return None
 
 
 def _uid(request: Request) -> str:
@@ -94,11 +93,10 @@ def _uid(request: Request) -> str:
 
 
 def _render(name: str, request: Request, /, status_code: int = 200, **ctx):
-    ctx.setdefault(
-        "user_email", u.email if (u := _auth.current_user(request)) else None
-    )
+    user = _auth.current_user(request)
+    ctx.setdefault("user_email", user.email if user else None)
     ctx.setdefault("stub_runs", request.app.state.stub_runs)
-    ctx.setdefault("area_nav", _AREA_NAV)
+    ctx.setdefault("area_nav", _access.visible_areas(user))
     return _templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
@@ -367,15 +365,15 @@ async def brief_piece(request: Request, brief_id: str):
 
 
 def _stream(request: Request, data, brief_id: str, uid: str):
-    user_email = u.email if (u := _auth.current_user(request)) else None
+    user = _auth.current_user(request)
     return stream_run(
         request,
         _templates,
         PAGE,
         data,
-        user_email=user_email,
+        user_email=user.email if user else None,
         on_complete=_persist(brief_id, uid),
-        context={"brief_id": brief_id, "area_nav": _AREA_NAV},
+        context={"brief_id": brief_id, "area_nav": _access.visible_areas(user)},
         template_open="_content_running_open.html",
         template_close="_content_running_close.html",
         template_error="_content_running_error.html",
