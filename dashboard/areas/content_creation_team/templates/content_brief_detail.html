@@ -15,20 +15,7 @@
   <p class="toolbar">
     <a class="iconbtn" href="/content/{{ brief.id }}/piece"
        title="View the finished piece" aria-label="View the finished piece">{{ icon_piece }}</a>
-    {% if piece.final_copy %}
-      {% if piece.published %}
-      <a class="button button--ghost" href="{{ piece.published.post_url }}"
-         target="_blank" rel="noopener">Published &rarr;</a>
-      <a class="button button--ghost" href="/content/{{ brief.id }}/publish">Publish again</a>
-      {% else %}
-      <a class="button" href="/content/{{ brief.id }}/publish">Publish to website</a>
-      {% endif %}
-    {% endif %}
   </p>
-  {% if piece.final_copy and not piece.approved %}
-  <p class="error">⚠ This piece shipped without full approval
-    (stopped on {{ piece.stopped_on }}) — review it before publishing.</p>
-  {% endif %}
   {% endif %}
 
   {% if errors %}<p class="error">Some fields need attention.</p>{% endif %}
