@@ -15,7 +15,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/">Automation&nbsp;Dashboard</a>
-    <nav><a href="/jobs">Job posts</a> <a href="/documents">Documents</a>{% for label, href in area_nav | default([]) %} <a href="{{ href }}">{{ label }}</a>{% endfor %} {% if user_email %}<span class="topbar__user">{{ user_email }}</span> {% endif %}<a href="/logout">Sign out</a></nav>
+    <nav>{% for a in area_nav | default([]) %}{% for label, href in a.nav %}<a href="{{ href }}">{{ label }}</a> {% endfor %}{% endfor %}{% if user_email %}<span class="topbar__user">{{ user_email }}</span> {% endif %}<a href="/logout">Sign out</a></nav>
   </header>
   <main>
     <section class="panel" id="working">

@@ -32,7 +32,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
-from dashboard import _auth, _documents, _drafts, _job_analysis, _jobs, _targeted_edit
+from dashboard import _access, _auth, _documents, _drafts, _job_analysis, _jobs, _targeted_edit
 from dashboard._auth import is_authed
 from dashboard._render import to_html
 from dashboard._streaming import stream_run
@@ -215,12 +215,16 @@ def create_app(
     auth_disabled: bool = False,
     stub_runs: bool = False,
     as_user: str = "test-user",
+    as_areas: tuple[str, ...] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Automation Dashboard")
     app.state.auth_disabled = auth_disabled
     # Who every request is from while `auth_disabled` — the synthetic id the
     # app's own stores scope by. Tests set it to check cross-user isolation.
     app.state.as_user = as_user
+    # Which areas that synthetic user may reach while `auth_disabled` —
+    # `None` (the default) is unrestricted, mirroring an unlisted user.
+    app.state.as_areas = as_areas
     # Stub mode: skip the capability call, render its `example_output`. Lets
     # you click through the whole app with no API key, no cost, no wait.
     app.state.stub_runs = stub_runs or os.environ.get("DASHBOARD_STUB_RUNS", "0") == "1"
@@ -244,25 +248,22 @@ def create_app(
     templates.env.filters["usd4"] = lambda n: f"${float(n):.4f}"
     templates.env.globals["stub_runs"] = app.state.stub_runs
     templates.env.globals["asset_v"] = _asset_version()
-    # Every area's topbar link (label, href) pairs, and the areas
-    # themselves for the index cards — the shell templates iterate these
-    # so no area name is hard-coded in base.html / index.html.
-    templates.env.globals["area_nav"] = [nl for a in AREAS for nl in a.nav]
-    templates.env.globals["areas"] = AREAS
 
     def render(name: str, request: Request, /, status_code: int = 200, **ctx):
-        # Every page's topbar shows who is signed in — inject it once here
-        # rather than in each handler. `_streamed_result` bypasses this and
-        # passes `user_email` explicitly.
-        ctx.setdefault(
-            "user_email", u.email if (u := _auth.current_user(request)) else None
-        )
+        # Every page's topbar shows who is signed in, and only the areas
+        # this user may reach — inject both once here rather than in each
+        # handler. `_streamed_result` bypasses this and passes them explicitly.
+        user = _auth.current_user(request)
+        ctx.setdefault("user_email", user.email if user else None)
+        ctx.setdefault("area_nav", _access.visible_areas(user))
         return templates.TemplateResponse(request, name, ctx, status_code=status_code)
 
     def guard(request: Request) -> RedirectResponse | None:
-        if is_authed(request):
-            return None
-        return RedirectResponse(f"/login?next={quote(request.url.path)}", status_code=303)
+        if not is_authed(request):
+            return RedirectResponse(f"/login?next={quote(request.url.path)}", status_code=303)
+        if not _access.can_access_path(_auth.current_user(request), request.url.path):
+            raise HTTPException(status_code=404)
+        return None
 
     # --- health & auth -----------------------------------------------------
 
@@ -283,7 +284,11 @@ def create_app(
         # Supabase Auth is a network call; keep it off the event loop.
         user = await run_in_threadpool(_auth.sign_in, email, password)
         if user is not None:
-            request.session["user"] = {"id": user.id, "email": user.email}
+            request.session["user"] = {
+                "id": user.id,
+                "email": user.email,
+                "areas": list(user.areas) if user.areas is not None else None,
+            }
             return RedirectResponse(next_url, status_code=303)
         return render(
             "login.html", request, status_code=401,
@@ -340,12 +345,15 @@ def create_app(
             on_complete = lambda output: _save_result(  # noqa: E731
                 page, job_post_id, user_id, output
             )
-        user_email = u.email if (u := _auth.current_user(request)) else None
+        user = _auth.current_user(request)
         return stream_run(
             request, templates, page, data,
-            user_email=user_email,
+            user_email=user.email if user else None,
             on_complete=on_complete,
-            context={"job_post_id": job_post_id},
+            context={
+                "job_post_id": job_post_id,
+                "area_nav": _access.visible_areas(user),
+            },
         )
 
     @app.get("/p/{slug}", response_class=HTMLResponse)
@@ -356,6 +364,7 @@ def create_app(
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
+        _access.require_slug(request, slug)
         jpid = request.query_params.get("job_post_id")
         # A writer page is always entered from a Job post. A bare visit has
         # nothing to work from — send it to the list to pick one. (`?example=`
@@ -412,6 +421,7 @@ def create_app(
         page = PAGES_BY_SLUG.get(slug)
         if page is None:
             raise HTTPException(status_code=404)
+        _access.require_slug(request, slug)
         form = _form_values(await request.form(), page)
         # The job post this run is written for (an app-storage key, like
         # `background_document_ids` — never a capability `Input` field). A

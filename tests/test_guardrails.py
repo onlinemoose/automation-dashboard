@@ -26,6 +26,7 @@ PAGES_DIR = DASHBOARD / "pages"
 SHELL_MODULES = {
     "dashboard",  # dashboard/__init__.py + dashboard/__main__.py
     "dashboard.app", "dashboard._auth", "dashboard._render", "dashboard._streaming",
+    "dashboard._access",
     "dashboard.hashpw", "dashboard.pages", "dashboard.pages._spec",
     "dashboard.areas",  # the areas package marker; each area is claimed below
 }
@@ -335,3 +336,23 @@ def test_every_page_is_registered_and_well_formed() -> None:
             for field in ("input_tokens", "output_tokens",
                           "cache_read_input_tokens", "cache_write_input_tokens"):
                 assert isinstance(getattr(meta, field), int), f"{page.slug}: {field} not an int"
+
+
+def test_access_table_matches_manifest() -> None:
+    """`dashboard._access`'s area table (docs/ACCESS.md) mirrors this same
+    manifest: every key it declares is a real area, and each area's URL
+    prefixes and page slugs stay inside what that area actually owns."""
+    from dashboard._access import _table
+
+    table = _table()
+    assert set(table) <= set(AREAS) | {"job_application"}
+    for key, decl in table.items():
+        if key == "job_application":
+            continue
+        manifest_first_segments = {
+            "/" + r.strip("/").split("/")[0] for r in AREAS[key]["routes"]
+        }
+        assert set(decl.prefixes) <= manifest_first_segments, (
+            f"{key}: AreaDecl.prefixes {decl.prefixes} outside the manifest routes"
+        )
+    assert table["job_application"].slugs == {"cover-letter-writer", "cv-writer"}

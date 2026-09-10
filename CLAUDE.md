@@ -96,10 +96,11 @@ adapters, routes, templates, and docs. **Areas never import each other.**
 
 **Shell** (shared; every area depends on it, it depends on no area):
 `app.py` routing skeleton + `/p/{slug}` + area-router mount, `_auth.py`,
-`_render.py` (+ `make_templates`), `_streaming.py` (`stream_run`),
-`pages/_spec.py` (+ `Area`), `pages/__init__.py`, `areas/__init__.py`,
+`_access.py` (per-user area grants), `_render.py` (+ `make_templates`),
+`_streaming.py` (`stream_run`), `pages/_spec.py` (+ `Area`),
+`pages/__init__.py`, `areas/__init__.py`,
 `templates/{base,login,index,page,result,_result_panel,_running_*}.html`,
-`static/app.css`, `docs/{EXPERIENCE,DEPLOY,DEPLOYMENT_CHECKLIST,USER_SCOPING}.md`,
+`static/app.css`, `docs/{EXPERIENCE,DEPLOY,DEPLOYMENT_CHECKLIST,USER_SCOPING,ACCESS}.md`,
 `tests/test_{pages,auth,auth_backend,guardrails}.py`.
 
 **Working rule.** When a task names one area, change only that area's
@@ -122,6 +123,7 @@ dashboard/
   app.py               FastAPI app: login, an index, and two generic routes
                        (GET/POST /p/{slug}) that drive every page from its Page spec
   _auth.py             single-password session login (scrypt hash in the env)
+  _access.py           per-user area grants: table + can_access_* + visible_areas
   _documents.py        the app's own Background documents store (Supabase table)
   _jobs.py             the app's own Job posts store (Supabase table)
   _job_analysis.py     adapter for the job-analyst capability + emphasis format/parse
@@ -143,6 +145,7 @@ dashboard/
   static/content-draft-edit.js   the same, for the Content Creation Team area
 docs/
   EXPERIENCE.md        the rules in prose + "Adding a page" walk-through
+  ACCESS.md            per-user area access control (app_metadata grants)
   BACKGROUND_DOCUMENTS.md   the app-owned Background documents store
   JOB_POSTS.md         the app-owned Job posts store + analyse step
   DRAFTS.md            the app-owned Working drafts store + targeted revision

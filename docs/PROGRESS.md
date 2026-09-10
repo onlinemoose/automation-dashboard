@@ -3,6 +3,33 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-10 — Per-user area access control
+
+New shell module `dashboard/_access.py` (docs/ACCESS.md): a small static
+table (job_application declared here verbatim, every other area derived
+from its packaged `Area`) plus pure predicates (`can_access_path`,
+`can_access_slug`, `visible_areas`) and a `require_slug` 404 helper.
+
+`AuthedUser` gains `areas: tuple[str, ...] | None` (`None` = every area,
+`()` = none) — resolved once at sign-in from Supabase
+`app_metadata.areas` (offline: `DASHBOARD_DEV_AREAS`) and carried in the
+signed session cookie, so a grant change takes effect on next login, not
+mid-session. Enforced at three points: `guard()` in `app.py`, the two
+generic `/p/{slug}` routes, and `_guard()` in the Content Creation Team
+router. A denied area is dropped from the topbar nav and the index cards
+and 404s on a direct URL — never a 403 (mirrors the row-scoping choice in
+docs/USER_SCOPING.md).
+
+`area_nav` / `areas` are no longer static Jinja globals; `render()` /
+`_render()` now inject a per-request, per-user `area_nav` from
+`_access.visible_areas`. `base.html`, `index.html` and both holding-view
+templates iterate the new shape (`AreaDecl.nav` pairs instead of a flat
+list) — a full-access user's topbar and index render unchanged.
+
+New `tests/test_access.py`; `tests/test_guardrails.py` gains
+`dashboard._access` in `SHELL_MODULES` and
+`test_access_table_matches_manifest`.
+
 ## 2026-09-09 — Bump content-creation-team pin v0.1.0 -> v0.2.0
 
 `uv add` rev `v0.1.0` (`dbe01a8`) -> `v0.2.0` (`71054e2`) + `uv lock`.

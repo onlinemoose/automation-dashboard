@@ -147,9 +147,18 @@ matches the submitted email case-insensitively against
   verification (the redirect lands on a URL Supabase must be configured
   to allow). Email + password ships first.
 
+## Area access
+
+This document covers *which rows* a signed-in user sees. Orthogonal to
+that: `docs/ACCESS.md` covers *which product areas* a user can reach at
+all — a per-user grant on `AuthedUser.areas`, resolved at sign-in from
+`app_metadata` and enforced with a 404 on a denied area, same as this
+scoping enforces a 404 on another user's row.
+
 ## See also
 
 - `migrations/2026-09-01_user_scoping.sql` — the applied schema change
   and its rollback
 - `BACKGROUND_DOCUMENTS.md`, `JOB_POSTS.md`, `DRAFTS.md` — the three
   app-owned stores
+- `ACCESS.md` — per-user area access control

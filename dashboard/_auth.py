@@ -1,9 +1,10 @@
 """Session auth, backed by Supabase Auth.
 
 Sign-in is email + password against Supabase Auth (the *anon* key, not
-the service key); a valid login puts `{"id", "email"}` into the signed
-session cookie, which stays the session of record. Every row the app
-stores is scoped to that id — see `docs/USER_SCOPING.md`.
+the service key); a valid login puts `{"id", "email", "areas"}` into the
+signed session cookie, which stays the session of record. Every row the
+app stores is scoped to that id — see `docs/USER_SCOPING.md`. `areas` is
+which product areas this user may reach — see `docs/ACCESS.md`.
 
 When `SUPABASE_ANON_KEY` is blank the module falls back to an offline
 backend that checks the submitted email against `DASHBOARD_DEV_EMAIL` and
@@ -79,10 +80,34 @@ class AuthedUser:
 
     The id is what every app-owned row is scoped by, so it is the one
     field the stores care about.
+
+    `areas` is which product areas (docs/ACCESS.md) this user may reach:
+    `None` means unrestricted (every area — the default, and the only
+    value before this feature existed), a tuple is the allowed area keys,
+    and `()` means none. Resolved once at sign-in from Supabase
+    `app_metadata` (or `DASHBOARD_DEV_AREAS` offline) and carried in the
+    session cookie — a change in Supabase takes effect on next login.
     """
 
     id: str
     email: str
+    areas: tuple[str, ...] | None = None
+
+
+def areas_from_metadata(md: object) -> tuple[str, ...] | None:
+    """`app_metadata["areas"]` normalised. Missing / not a dict / null ->
+    None (unrestricted). A list or single string -> tuple of str. `[]` ->
+    `()` (no areas)."""
+    if not isinstance(md, dict):
+        return None
+    raw = md.get("areas")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, (list, tuple)):
+        return None
+    return tuple(str(a) for a in raw)
 
 
 class _AuthBackend(Protocol):
@@ -109,7 +134,15 @@ class _MemoryAuthBackend:
             return None
         if not verify_password(password, expected_hash):
             return None
-        return AuthedUser(id=self.ID, email=expected_email)
+        # Parallel source to Supabase app_metadata, for offline/dev logins:
+        # unset -> every area, set-but-empty -> none.
+        raw = os.environ.get("DASHBOARD_DEV_AREAS")
+        areas = (
+            tuple(s.strip() for s in raw.split(",") if s.strip())
+            if raw is not None
+            else None
+        )
+        return AuthedUser(id=self.ID, email=expected_email, areas=areas)
 
 
 class _SupabaseAuthBackend:
@@ -128,7 +161,10 @@ class _SupabaseAuthBackend:
         user = getattr(res, "user", None)
         if user is None or not getattr(user, "id", None):
             return None
-        return AuthedUser(id=str(user.id), email=str(getattr(user, "email", "") or email))
+        areas = areas_from_metadata(getattr(user, "app_metadata", None))
+        return AuthedUser(
+            id=str(user.id), email=str(getattr(user, "email", "") or email), areas=areas
+        )
 
 
 _auth_backend_instance: _AuthBackend | None = None
@@ -174,10 +210,15 @@ def current_user(request: Request) -> AuthedUser | None:
     state = request.app.state
     if getattr(state, "auth_disabled", False):
         uid = getattr(state, "as_user", "test-user")
-        return AuthedUser(id=uid, email=f"{uid}@example.test")
+        areas = getattr(state, "as_areas", None)
+        return AuthedUser(id=uid, email=f"{uid}@example.test", areas=areas)
     stored = request.session.get("user")
     if isinstance(stored, dict) and stored.get("id"):
-        return AuthedUser(id=str(stored["id"]), email=str(stored.get("email") or ""))
+        raw_areas = stored.get("areas")
+        areas = tuple(raw_areas) if isinstance(raw_areas, list) else None
+        return AuthedUser(
+            id=str(stored["id"]), email=str(stored.get("email") or ""), areas=areas
+        )
     return None
 
 
