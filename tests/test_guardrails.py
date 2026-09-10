@@ -75,6 +75,7 @@ AREAS = {
             "/content", "/content/new", "/content/{brief_id}",
             "/content/{brief_id}/delete", "/content/{brief_id}/piece",
             "/content/{brief_id}/run", "/content/{brief_id}/send-back",
+            "/content/{brief_id}/publish",
             "/content/drafts", "/content/drafts/{draft_id}",
             "/content/drafts/{draft_id}/revise", "/content/drafts/{draft_id}/accept",
             "/content/drafts/{draft_id}/undo", "/content/drafts/{draft_id}/edit",

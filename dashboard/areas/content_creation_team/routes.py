@@ -16,6 +16,7 @@ no Job Application module is imported.
 
 from __future__ import annotations
 
+import base64
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +39,8 @@ from dashboard.areas.content_creation_team import (
     _briefs,
     _content_drafts,
     _content_targeted_edit,
+    _feldklang_repo,
+    _publish,
 )
 from dashboard.areas.content_creation_team import _content_team
 from dashboard.areas.content_creation_team.pages.content_creation_team import (
@@ -66,6 +69,7 @@ ROUTES = frozenset(
         "/content/{brief_id}/piece",
         "/content/{brief_id}/run",
         "/content/{brief_id}/send-back",
+        "/content/{brief_id}/publish",
         "/content/drafts",
         "/content/drafts/{draft_id}",
         "/content/drafts/{draft_id}/revise",
@@ -444,6 +448,150 @@ async def brief_send_back(request: Request, brief_id: str):
             ),
         )
     return _stream(request, data, brief_id, uid)
+
+
+# --- publish to website ------------------------------------------------
+# Synchronous, not streamed: Recraft generation + optimisation is ~5-15s
+# (unlike the multi-minute content-team run), so a plain
+# run_in_threadpool is enough. The capability runs before any GitHub
+# call, so a capability failure aborts cleanly with nothing committed.
+
+
+def _publish_values(piece: dict) -> dict:
+    return {
+        "title": str(piece.get("title") or ""),
+        "excerpt": str(piece.get("excerpt") or ""),
+        "slug": str(piece.get("slug") or ""),
+        "tags": "\n".join(piece.get("tags") or []),
+        "image_prompt": "",
+    }
+
+
+def _publish_ctx(request: Request, brief, piece: dict, **extra) -> dict:
+    ctx = dict(
+        brief=brief,
+        brief_id=brief.id,
+        piece=piece,
+        values=_publish_values(piece),
+        error=None,
+        result=None,
+        page=PAGE,
+    )
+    ctx.update(extra)
+    return ctx
+
+
+@_briefs_router.get("/content/{brief_id}/publish", response_class=HTMLResponse)
+async def publish_form(request: Request, brief_id: str):
+    if (redirect := _guard(request)) is not None:
+        return redirect
+    brief = await run_in_threadpool(_briefs.get_brief, brief_id, _uid(request))
+    if brief is None:
+        raise HTTPException(status_code=404)
+    piece = brief.piece if isinstance(brief.piece, dict) else None
+    if not piece or not piece.get("final_copy"):
+        return RedirectResponse(f"/content/{brief_id}", status_code=303)
+    return _render("_content_publish_panel.html", request, **_publish_ctx(request, brief, piece))
+
+
+def _publish_overrides(form) -> dict:
+    tags_raw = str(form.get("tags") or "")
+    tags = [t.strip() for t in tags_raw.splitlines() if t.strip()] if tags_raw.strip() else None
+    return {
+        "title": str(form.get("title") or ""),
+        "excerpt": str(form.get("excerpt") or ""),
+        "slug": str(form.get("slug") or ""),
+        "tags": tags,
+        "image_prompt": str(form.get("image_prompt") or ""),
+    }
+
+
+@_briefs_router.post("/content/{brief_id}/publish", response_class=HTMLResponse)
+async def publish_run(request: Request, brief_id: str):
+    if (redirect := _guard(request)) is not None:
+        return redirect
+    uid = _uid(request)
+    brief = await run_in_threadpool(_briefs.get_brief, brief_id, uid)
+    if brief is None:
+        raise HTTPException(status_code=404)
+    piece = brief.piece if isinstance(brief.piece, dict) else None
+    if not piece or not piece.get("final_copy"):
+        raise HTTPException(status_code=400, detail="This brief has no finished piece yet.")
+
+    form = await request.form()
+    confirm_republish = str(form.get("confirm_republish") or "") == "1"
+    if isinstance(piece.get("published"), dict) and not confirm_republish:
+        return _render(
+            "_content_publish_panel.html", request, status_code=409,
+            **_publish_ctx(
+                request, brief, piece,
+                error="This piece has already been published. \"Publish again\" only "
+                "does something useful under a new slug — the commit refuses if the "
+                "slug already exists.",
+            ),
+        )
+
+    if request.app.state.stub_runs:
+        stub_piece = {
+            **piece,
+            "published": {
+                "at": _now_iso(), "commit_sha": "stub", "post_url": "https://feldklang.netlify.app/stub-post",
+            },
+        }
+        return _render(
+            "_content_publish_panel.html", request,
+            **_publish_ctx(
+                request, brief, stub_piece,
+                result={
+                    "post_url": "https://feldklang.netlify.app/stub-post",
+                    "commit_sha": "stub", "image_data_uri": None, "post_content": None,
+                },
+            ),
+        )
+
+    overrides = _publish_overrides(form)
+    data = _publish.build_input(piece, overrides=overrides)
+
+    try:
+        output = await run_in_threadpool(_publish.run, data)
+    except Exception as exc:  # noqa: BLE001 - fail-closed: shown as a panel, never a 5xx
+        return _render(
+            "_content_publish_panel.html", request, status_code=422,
+            **_publish_ctx(request, brief, piece, error=f"Generating the post/image failed: {exc}"),
+        )
+
+    try:
+        commit = await run_in_threadpool(
+            _feldklang_repo.commit_post,
+            post_path=output.post_path,
+            post_content=output.post_content,
+            image_path=output.image_path,
+            image_bytes=output.image_bytes,
+            slug=data.slug,
+            title=data.title,
+        )
+    except _feldklang_repo.PublishError as exc:
+        return _render(
+            "_content_publish_panel.html", request, status_code=422,
+            **_publish_ctx(request, brief, piece, error=str(exc)),
+        )
+
+    published = {"at": _now_iso(), "commit_sha": commit.commit_sha, "post_url": commit.post_url}
+    updated_piece = {**piece, "title": data.title, "excerpt": data.excerpt,
+                      "slug": data.slug, "tags": list(data.tags), "published": published}
+    await run_in_threadpool(lambda: _briefs.update_brief(brief_id, uid, piece=updated_piece))
+    return _render(
+        "_content_publish_panel.html", request,
+        **_publish_ctx(
+            request, brief, updated_piece,
+            result={
+                "post_url": commit.post_url,
+                "commit_sha": commit.commit_sha,
+                "image_data_uri": "data:image/jpeg;base64," + base64.b64encode(output.image_bytes).decode("ascii"),
+                "post_content": output.post_content,
+            },
+        ),
+    )
 
 
 # --- span-draft editing (mirrors /drafts*) -----------------------------

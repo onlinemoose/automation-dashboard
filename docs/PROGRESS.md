@@ -3,6 +3,59 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-10 — Content Creation Team: "Publish to website" (Part B)
+
+Wires the new `publish-to-website` capability into the Content Creation
+Team area — `POST /content/{brief_id}/publish` generates a hero image
+and formats a finished piece into Feldklang's `.mdx` convention, then
+commits both files to `onlinemoose/feldklang`.
+
+- `_publish.py`: adapter (mirrors `_content_team.py`) — `build_input`
+  maps a brief's stored `piece` + the publish form's overrides onto
+  `publish_to_website.Input`; `cost_meta` for the result footer.
+  `DEFAULT_RECRAFT_STYLE_ID` is `None` — the brand style (plan A6) isn't
+  created yet, see `publish-to-website`'s own `docs/PROGRESS.md`.
+- `_feldklang_repo.py` (new): the app's first outbound write to a live
+  GitHub repo. One atomic, additive-only commit of the `.mdx` + hero
+  JPEG via the Git Data API — `base_tree` always set, a hard path
+  allowlist, fast-forward-only ref update (`force` never `true`), a
+  pre-existing slug always refuses (no overwrite anywhere), and a
+  post-commit diff check that flags rather than silently trusting a
+  landed commit. Reads `FELDKLANG_GH_TOKEN` at call time — deliberately
+  not a `GH_TOKEN` fallback (that token is read-only, for build-time
+  capability pulls).
+- `routes.py`: `GET`/`POST /content/{brief_id}/publish` — synchronous
+  (`run_in_threadpool`, no streaming; Recraft + optimisation is ~5-15s,
+  not minutes), idempotent (`piece["published"]` set blocks a re-publish
+  without `confirm_republish`), fail-closed (a capability failure or a
+  `PublishError` renders a 422/409 panel, brief unchanged, nothing
+  committed). Stub mode skips both the capability and the GitHub call.
+- `content_brief_detail.html` / `_content_publish_panel.html`: the
+  "Publish to website" button (+ "Publish again" once published, + the
+  not-fully-approved warning), the publish form (title/excerpt/slug/tags/
+  image-prompt override, no overwrite control), and the result panel
+  (live URL, commit sha, generated image + `.mdx` preview).
+- `pyproject.toml`: pinned `publish-to-website` — by **commit SHA**, not
+  a tag: pushing `v0.1.0` on that repo was rejected by GitHub (403),
+  likely a tag-protection rule on the template repo. See
+  `docs/DEPLOYMENT_CHECKLIST.md`'s `publish-to-website` bullet for the
+  fix and the follow-up to move to `rev = "v0.1.0"`. Also promoted
+  `httpx` from dev-only to a real dependency (`_feldklang_repo.py` needs
+  it directly, not just transitively).
+- `tests/test_content_publish.py`: `build_input` mapping, stub-mode (no
+  capability/GitHub call), a full success/failure/idempotency round trip
+  with `_publish.run` and `_feldklang_repo.commit_post` monkeypatched,
+  and `_feldklang_repo`'s own suite against an `httpx.MockTransport` —
+  the happy path, the `base_tree` guard, slug/path guards, the collision
+  refusal, the non-fast-forward retry (and its 3-attempt abort), the
+  post-commit verification, and the missing-token error.
+- **Not done in this pass**: Part C (the `additive-guard.yml` workflow +
+  branch protection on `onlinemoose/feldklang` itself) — that repo isn't
+  in this session's scope. Checklist item in
+  `docs/DEPLOYMENT_CHECKLIST.md`. No real Recraft or GitHub call has
+  been made — `RECRAFT_API_TOKEN` / `FELDKLANG_GH_TOKEN` aren't set
+  anywhere yet.
+
 ## 2026-09-10 — Analyse: show Anthropic API failures instead of a 500
 
 `POST /jobs/{id}/analyse` raised a bare 500 when the `job-analyst`

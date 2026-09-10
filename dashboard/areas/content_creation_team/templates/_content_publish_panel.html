@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Publish "{{ brief.title }}" — Content briefs{% endblock %}
+{% block main %}
+<section class="panel">
+  <p class="crumb"><a href="/content/{{ brief.id }}">&larr; {{ brief.title }}</a></p>
+  <h1>Publish to website</h1>
+  <p class="help">Generates a brand-consistent hero image, formats the post into
+    Feldklang's convention, and commits both files to <code>onlinemoose/feldklang</code>
+    in one go. There is no overwrite — a pre-existing slug always refuses; ship a
+    correction under a new slug instead.</p>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if piece.final_copy and not piece.approved %}
+  <p class="error">⚠ This piece shipped without full approval
+    (stopped on {{ piece.stopped_on }}) — review it before publishing.</p>
+  {% endif %}
+
+  {% if result %}
+  <section class="result">
+    <p class="lede">Published &rarr;
+      <a href="{{ result.post_url }}" target="_blank" rel="noopener">{{ result.post_url }}</a>.
+      Netlify is rebuilding — the post goes live in a minute or two.</p>
+    <p class="help">Commit: <code>{{ result.commit_sha }}</code></p>
+    {% if result.image_data_uri %}
+    <img src="{{ result.image_data_uri }}" alt="Generated hero image"
+         style="max-width: 100%; border-radius: 8px;">
+    {% endif %}
+    {% if result.post_content %}
+    <details>
+      <summary>Generated .mdx</summary>
+      <pre class="markdown-source">{{ result.post_content }}</pre>
+    </details>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <form method="post" action="/content/{{ brief.id }}/publish">
+    {% if piece.published %}
+    <input type="hidden" name="confirm_republish" value="1">
+    <p class="help">Already published &rarr;
+      <a href="{{ piece.published.post_url }}" target="_blank" rel="noopener">{{ piece.published.post_url }}</a>
+      (commit <code>{{ piece.published.commit_sha }}</code>).</p>
+    {% endif %}
+    <div class="field">
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" value="{{ values.title }}">
+    </div>
+    <div class="field">
+      <label for="excerpt">Excerpt</label>
+      <textarea id="excerpt" name="excerpt" rows="3">{{ values.excerpt }}</textarea>
+    </div>
+    <div class="field">
+      <label for="slug">Slug</label>
+      <input type="text" id="slug" name="slug" value="{{ values.slug }}">
+      <p class="help">Also the filename stem. Lowercase letters, digits and single
+        hyphens only.</p>
+    </div>
+    <div class="field">
+      <label for="tags">Tags</label>
+      <textarea id="tags" name="tags" rows="3">{{ values.tags }}</textarea>
+      <p class="help">One tag per line.</p>
+    </div>
+    <div class="field">
+      <label for="image_prompt">Hero image prompt override (optional)</label>
+      <textarea id="image_prompt" name="image_prompt" rows="3">{{ values.image_prompt }}</textarea>
+      <p class="help">Leave blank to use the automatically built brand prompt.</p>
+    </div>
+    <button type="submit">{% if piece.published %}Publish again{% else %}Publish to website{% endif %}</button>
+  </form>
+</section>
+{% endblock %}

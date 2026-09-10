@@ -48,6 +48,17 @@ nothing else changes.
       and the Claude GitHub App grant. Run
       `docs/migrations/2026-09-06_content_creation_team.sql` in the
       Supabase SQL editor (`content_briefs` + `content_drafts`).
+- [ ] **`publish-to-website`** (added 2026-09-10): add
+      `onlinemoose/publish-to-website` to the `GH_TOKEN` PAT repo list
+      and the Claude GitHub App grant, same as every other private
+      capability repo. **Note:** `pyproject.toml` currently pins it by
+      commit SHA, not a `vX.Y.Z` tag — pushing the `v0.1.0` tag was
+      rejected by GitHub (403), most likely a tag-protection rule on the
+      repo (it was created from `capability-module-template`, which may
+      carry one by default). Check **Settings → Tags** (or **Rules →
+      Rulesets**) on `onlinemoose/publish-to-website`, relax/allow the
+      `v*` pattern for the pushing credential, then move the pin in
+      `pyproject.toml` to `rev = "v0.1.0"` and `uv lock`.
 - [x] Secret env vars set by hand: `SESSION_SECRET` (fresh, via Render's
       Generate), `DASHBOARD_PASSWORD_HASH`, `ANTHROPIC_API_KEY`,
       `GH_TOKEN`. `DASHBOARD_HTTPS=1`.
@@ -105,6 +116,51 @@ in-memory fallback that does not survive a restart.
       move to Pro if the notes matter.
 
 This is the Supabase project **Phase 3 reuses** for real accounts.
+
+---
+
+## Publish to website — Recraft + Feldklang GitHub commit (needs config)
+
+The Content Creation Team area's **Publish to website** button
+(`docs/CONTENT_BRIEFS.md` → "Publish to website"). Code is done; needs
+these set before a real publish will work — until then the panel shows a
+"publishing not configured" / Recraft-auth error rather than failing
+silently.
+
+- [ ] Render env var (secret): `RECRAFT_API_TOKEN` — from
+      <https://www.recraft.ai/>.
+- [ ] Render env var (secret): `FELDKLANG_GH_TOKEN` — a **dedicated**
+      fine-grained GitHub PAT, distinct from `GH_TOKEN`:
+      **repository access limited to `onlinemoose/feldklang` only**;
+      permission **Contents: Read and write** and nothing else —
+      explicitly *not* Workflows (so it can't edit
+      `.github/workflows/**` and disable the additive-guard below), *not*
+      Administration, *not* delete. Add it to the same PAT-rotation task
+      as `GH_TOKEN` above (both expire ≤1 year).
+- [ ] Recraft brand `style_id` (plan A6, not yet done — no
+      `RECRAFT_API_TOKEN` was available while `publish-to-website` was
+      built): once a token exists, run the one-off `POST /v1/styles`
+      call with the Feldklang design-system reference images, compare a
+      few generations with/without it, and set the winner as
+      `DEFAULT_RECRAFT_STYLE_ID` in
+      `dashboard/areas/content_creation_team/_publish.py`.
+- [ ] Move the `publish-to-website` pin in `pyproject.toml` from the
+      interim commit SHA to `rev = "v0.1.0"` once the tag exists (see
+      the `publish-to-website` bullet above) — `uv lock`.
+- [ ] **Repo-side backstop on `onlinemoose/feldklang`** (defence in
+      depth, independent of this app): `.github/workflows/additive-guard.yml`
+      (fails a push to `master` that deletes/renames a file or touches a
+      path outside `src/data/post/**` / `src/assets/images/**`), branch
+      protection on `master` blocking force-push and deletion (not
+      "require PR review" — direct commits are the intended design), and,
+      if the plan supports it, a push ruleset restricting write access to
+      exactly those two path globs. Not built as part of this pass — see
+      `publish-to-website`'s plan, Part C.
+- [ ] Smoke test: a Content brief with a finished, approved piece →
+      "Publish to website" → the generated image/`.mdx` preview renders →
+      the commit lands on `onlinemoose/feldklang` → Netlify rebuilds →
+      the post is live. Re-publish the same slug → refused (409), repo
+      unchanged.
 
 ---
 
@@ -199,6 +255,8 @@ integrations, and Apple has no clean API path).
 | `GH_TOKEN` | fine-grained PAT, read-only Contents on the private capability repos | dashboard (secret) |
 | `SUPABASE_URL` | Supabase project URL (Background documents store) | dashboard (secret) |
 | `SUPABASE_SERVICE_KEY` | Supabase `service_role` key — full access, server-side only | dashboard (secret) |
+| `RECRAFT_API_TOKEN` | Recraft API token (recraft.ai) — `publish-to-website`'s hero-image generation | dashboard (secret) |
+| `FELDKLANG_GH_TOKEN` | Fine-grained PAT, **repository access limited to `onlinemoose/feldklang` only**, permission **Contents: Read and write** and nothing else (explicitly not Workflows, not Administration, no delete) | dashboard (secret) |
 | `DASHBOARD_HTTPS` | `1` | `render.yaml` ok |
 | `DASHBOARD_STUB_RUNS` | unset, or `0` | — must not be `1` |
 | `PYTHON_VERSION` | `3.12` (or use `.python-version`) | `render.yaml` ok |
