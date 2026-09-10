@@ -141,11 +141,42 @@ def test_forgot_form_renders(offline_auth) -> None:
     assert 'name="email"' in resp.text
 
 
-def test_forgot_submit_is_generic_and_safe_offline(offline_auth) -> None:
+def test_forgot_submit_redirects_even_offline(offline_auth) -> None:
     client = TestClient(create_app(auth_disabled=False))
-    resp = client.post("/auth/forgot", data={"email": "whoever@example.com"})
-    assert resp.status_code == 200
-    assert "if that address has an account" in resp.text.lower()
+    resp = client.post(
+        "/auth/forgot",
+        data={"email": "whoever@example.com"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/auth/forgot?sent=1"
+    landed = client.get(resp.headers["location"])
+    assert "if that address has an account" in landed.text.lower()
+
+
+def test_forgot_submit_redirects_after_post_so_refresh_cannot_resend(monkeypatch) -> None:
+    """POST fires one recovery email then 303s; reloading the confirmation
+    page is a plain GET that sends nothing."""
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_ANON_KEY", "anon-key")
+    sent: list[str] = []
+    monkeypatch.setattr(_auth, "send_recovery", lambda email: sent.append(email))
+    client = TestClient(create_app(auth_disabled=False))
+
+    resp = client.post(
+        "/auth/forgot",
+        data={"email": "whoever@example.com"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/auth/forgot?sent=1"
+    assert sent == ["whoever@example.com"]
+
+    # A refresh of the confirmation page must not send a second email.
+    landed = client.get("/auth/forgot?sent=1")
+    assert landed.status_code == 200
+    assert "if that address has an account" in landed.text.lower()
+    assert sent == ["whoever@example.com"]
 
 
 def test_set_password_form_rejects_an_unknown_type(offline_auth) -> None:

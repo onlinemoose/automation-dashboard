@@ -349,16 +349,21 @@ def create_app(
 
     @app.get("/auth/forgot", response_class=HTMLResponse)
     def forgot_form(request: Request):
-        return render("auth_forgot.html", request, sent=False)
+        # `?sent=1` is the post-submit landing (see forgot_submit) — same page,
+        # confirmation state. A plain visit starts at the form.
+        sent = request.query_params.get("sent") == "1"
+        return render("auth_forgot.html", request, sent=sent)
 
-    @app.post("/auth/forgot", response_class=HTMLResponse)
+    @app.post("/auth/forgot")
     async def forgot_submit(request: Request):
         form = await request.form()
         email = str(form.get("email") or "").strip()
         if email and _auth.supabase_auth_configured():
             await run_in_threadpool(_auth.send_recovery, email)
-        # Always the same response — never reveal whether the address exists.
-        return render("auth_forgot.html", request, sent=True)
+        # Redirect after POST so a browser refresh reloads a harmless page
+        # instead of firing another recovery email. The confirmation is the
+        # same whether or not the address exists — never disclose that.
+        return RedirectResponse("/auth/forgot?sent=1", status_code=303)
 
     # --- pages -----------------------------------------------------------
 

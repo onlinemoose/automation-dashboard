@@ -3,6 +3,19 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-10 — Forgot-password: redirect after POST
+
+`POST /auth/forgot` rendered the "check your email" confirmation directly,
+so a browser refresh (or Back/Forward) re-submitted the form and fired
+another Supabase recovery email — reproduced in the wild as three emails
+from one visit while the SMTP send was slow. It now 303s to
+`GET /auth/forgot?sent=1`, which renders the same confirmation state; a
+refresh is a harmless GET that sends nothing. Matches the redirect-after-
+submit the invite / set-password flow already used. `send_recovery` was
+always called once per POST — the duplication was browser re-submission,
+not a loop. New tests in `tests/test_auth.py` assert the 303 and that
+reloading the confirmation page sends no second email.
+
 ## 2026-09-10 — Self-serve password: invite & recovery
 
 Accounts are now invite-only *and* the invited user sets their own
