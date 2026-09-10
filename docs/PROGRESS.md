@@ -3,6 +3,39 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-10 — Self-serve password: invite & recovery
+
+Accounts are now invite-only *and* the invited user sets their own
+password — the admin no longer creates it and hands it over. Two new
+public shell routes in `app.py`: `GET|POST /auth/set-password` and
+`GET|POST /auth/forgot` (added to `SHELL_ROUTES` in
+`tests/test_guardrails.py`). New templates `auth_set_password.html`,
+`auth_forgot.html`; `login.html` gains one "Forgot your password?" link.
+
+`dashboard/_auth.py` grows `set_password(token_hash, otp_type,
+new_password) -> AuthedUser` (raises `PasswordSetError`),
+`send_recovery(email)`, `supabase_auth_configured()`, and
+`PASSWORD_SET_OTP_TYPES`. `set_password` builds a **fresh** Supabase
+client (not the shared backend one — `verify_otp` mutates instance
+session state), calls `verify_otp({token_hash, type})` then
+`update_user({password})`, and returns the user; the route then writes
+the same `session["user"]` dict `login_submit` does, so they land signed
+in. `token_hash` rides a hidden form field between GET and POST — no
+server-side state.
+
+Server-side, no client JS: relies on the Supabase email templates being
+pointed at `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}
+&type=invite|recovery` and Site URL set — see
+`docs/USER_SCOPING.md` ("Setting a password") and the
+`docs/DEPLOYMENT_CHECKLIST.md` checklist. Built-in Supabase email is
+rate-limited; a custom SMTP provider is noted as a pre-production task.
+
+Offline (`SUPABASE_ANON_KEY` unset) the routes render an "isn't
+configured" notice instead of the form. Supabase happy path is verified
+by hand (like sign-in); `tests/test_auth.py` covers the routes, the
+offline degradation, the "Forgot your password?" link, and the absence of
+any signup link. No new env var; no DB migration (Auth-side only).
+
 ## 2026-09-10 — Per-user area access control
 
 New shell module `dashboard/_access.py` (docs/ACCESS.md): a small static

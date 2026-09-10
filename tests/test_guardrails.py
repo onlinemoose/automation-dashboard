@@ -38,7 +38,11 @@ COMPOSITION_ROOTS = {"dashboard.app", "dashboard.pages"}
 
 # The shell's own routes. Every capability still rides the two generic
 # `/p/{slug}` routes — a new page is a `Page` spec, not a route.
-SHELL_ROUTES = {"/health", "/login", "/logout", "/", "/p/{slug}"}
+SHELL_ROUTES = {
+    "/health", "/login", "/logout", "/",
+    "/auth/set-password", "/auth/forgot",  # invite / recovery: set your own password
+    "/p/{slug}",
+}
 
 AREAS = {
     # Job Application Co-Pilot — the incumbent. Stays flat under

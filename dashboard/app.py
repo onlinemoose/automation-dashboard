@@ -300,6 +300,66 @@ def create_app(
         request.session.clear()
         return RedirectResponse("/login", status_code=303)
 
+    # --- setting a password: invite & recovery -------------------------
+    # An invited user (or one who forgot their password) lands here from a
+    # Supabase Auth email link carrying a single-use `token_hash`; they set
+    # their own password and the admin never sees it. `docs/USER_SCOPING.md`.
+
+    @app.get("/auth/set-password", response_class=HTMLResponse)
+    def set_password_form(request: Request):
+        token_hash = request.query_params.get("token_hash", "")
+        otp_type = request.query_params.get("type", "")
+        if otp_type not in _auth.PASSWORD_SET_OTP_TYPES:
+            return RedirectResponse("/login", status_code=303)
+        return render(
+            "auth_set_password.html", request,
+            token_hash=token_hash, type=otp_type, error=None,
+            unavailable=not _auth.supabase_auth_configured(),
+        )
+
+    @app.post("/auth/set-password", response_class=HTMLResponse)
+    async def set_password_submit(request: Request):
+        form = await request.form()
+        token_hash = str(form.get("token_hash") or "")
+        otp_type = str(form.get("type") or "")
+        password = str(form.get("password") or "")
+        if otp_type not in _auth.PASSWORD_SET_OTP_TYPES:
+            return RedirectResponse("/login", status_code=303)
+        if not _auth.supabase_auth_configured():
+            return render(
+                "auth_set_password.html", request, status_code=400,
+                token_hash=token_hash, type=otp_type, error=None, unavailable=True,
+            )
+        try:
+            # verify_otp + update_user — a network call; keep it off the loop.
+            user = await run_in_threadpool(
+                _auth.set_password, token_hash, otp_type, password
+            )
+        except _auth.PasswordSetError as exc:
+            return render(
+                "auth_set_password.html", request, status_code=400,
+                token_hash=token_hash, type=otp_type, error=str(exc), unavailable=False,
+            )
+        request.session["user"] = {
+            "id": user.id,
+            "email": user.email,
+            "areas": list(user.areas) if user.areas is not None else None,
+        }
+        return RedirectResponse("/", status_code=303)
+
+    @app.get("/auth/forgot", response_class=HTMLResponse)
+    def forgot_form(request: Request):
+        return render("auth_forgot.html", request, sent=False)
+
+    @app.post("/auth/forgot", response_class=HTMLResponse)
+    async def forgot_submit(request: Request):
+        form = await request.form()
+        email = str(form.get("email") or "").strip()
+        if email and _auth.supabase_auth_configured():
+            await run_in_threadpool(_auth.send_recovery, email)
+        # Always the same response — never reveal whether the address exists.
+        return render("auth_forgot.html", request, sent=True)
+
     # --- pages -----------------------------------------------------------
 
     @app.get("/", response_class=HTMLResponse)

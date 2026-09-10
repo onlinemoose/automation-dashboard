@@ -17,8 +17,10 @@ documents, job posts, and working drafts.
 ## Decisions taken
 
 - **Sign-in method** — email + password now. Magic link deferred (below).
-- **Account creation** — public signup disabled; operator accounts are
-  pre-created in the Supabase dashboard.
+- **Account creation** — invite-only. An admin invites from the Supabase
+  dashboard; the invited user sets their own password at
+  `/auth/set-password` (see "Setting a password" below), so the admin
+  never handles it. Public signup stays disabled.
 - **Existing rows** — deleted (truncated) as part of the migration. No
   backfill: an existing row has no owner and assigning one would be a
   guess.
@@ -138,14 +140,61 @@ matches the submitted email case-insensitively against
 `DASHBOARD_DEV_EMAIL` and the password against
 `DASHBOARD_PASSWORD_HASH`. Both are documented in `.env.example`.
 
+## Setting a password — invite & recovery
+
+`sign_in_with_password` assumes the user already has a password. Two
+paths create or replace one, both server-side, no client JavaScript:
+
+- **Invite** — an admin clicks *Invite* in the Supabase dashboard
+  (Authentication → Users). The user gets an email; its link lands on
+  `GET /auth/set-password?token_hash=…&type=invite`.
+- **Forgot password** — the login page links to `GET /auth/forgot`, which
+  posts an email to `POST /auth/forgot` → `reset_password_for_email`. The
+  recovery email's link lands on the same page with `type=recovery`. The
+  response is always the same ("if that address has an account…") — it
+  never reveals whether the address is registered.
+
+`GET /auth/set-password` renders one password field with `token_hash` and
+`type` in hidden fields — no Supabase call yet. `POST /auth/set-password`
+(`dashboard/_auth.py:set_password`) builds a **fresh** Supabase client,
+calls `verify_otp({token_hash, type})` then `update_user({password})`, and
+on success writes the same `session["user"]` dict that `login_submit`
+does — the user lands signed in at `/`. A `PasswordSetError` (expired or
+already-used link, or a password the project policy rejects) re-renders
+the form with the message.
+
+`token_hash` is single-use and short-lived, so it rides in the hidden
+field between GET and POST with no server-side state. Offline
+(`SUPABASE_ANON_KEY` unset) these routes render an "isn't configured"
+notice instead of the form — the dev login has no tokens.
+
+### Required Supabase console config
+
+The default Supabase email links point at Supabase's own `/auth/v1/verify`
+endpoint, which redirects back with the tokens in the URL *fragment* — a
+server-rendered app never sees that. Point the templates at this app:
+
+1. **Authentication → Email Templates → Invite user** — link →
+   `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=invite`
+2. **Authentication → Email Templates → Reset Password** — link →
+   `{{ .SiteURL }}/auth/set-password?token_hash={{ .TokenHash }}&type=recovery`
+3. **Authentication → URL Configuration → Site URL** — the deploy origin
+   (e.g. `https://…onrender.com`); `http://127.0.0.1:8000` locally.
+4. Keep email signups disabled — invites are unaffected.
+5. Supabase's built-in email is rate-limited (~2–4/hour) and not for
+   production — configure a custom SMTP provider before real use.
+
+Area grants (`docs/ACCESS.md`) are still set separately on the invited
+user's `app_metadata`; the invite doesn't carry them.
+
 ## Out of scope
 
 - **RLS policies keyed to `auth.uid()`** — future hardening. The service
   key bypasses them anyway, so they add nothing until the app stops using
   it. Scoping is enforced in the application layer for now.
-- **Magic link** — deferred, a follow-up that needs interactive
-  verification (the redirect lands on a URL Supabase must be configured
-  to allow). Email + password ships first.
+- **Magic link login** — passwordless *sign-in* is still deferred. The
+  invite / recovery *password-set* flow above is implemented and uses the
+  same kind of email link, verified server-side.
 
 ## Area access
 
