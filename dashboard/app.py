@@ -730,7 +730,18 @@ def create_app(
         job = await run_in_threadpool(_jobs.get_job_post, job_id, uid)
         if job is None:
             raise HTTPException(status_code=404)
-        analysis = await run_in_threadpool(_job_analysis.analyse, job.posting)
+        try:
+            analysis = await run_in_threadpool(_job_analysis.analyse, job.posting)
+        except _job_analysis.AnalysisError as exc:
+            # The capability's Anthropic call failed (bad key, rate limit,
+            # outage). Same treatment as an empty result: 502, keep the
+            # stored emphasis, show why.
+            return render(
+                "job_detail.html", request, status_code=502,
+                job=job, values={}, errors={}, summary=None, meta=None, edit=False,
+                emphasis_items=_job_analysis.parse_emphasis_items(job.emphasis),
+                notice=str(exc),
+            )
         if not analysis.requirements:
             # The capability returned nothing usable (e.g. a model reply its
             # normaliser couldn't recover). Leave the emphasis list alone —

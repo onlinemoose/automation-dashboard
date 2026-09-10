@@ -30,6 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from importlib import metadata
 
+import anthropic
 import job_analyst
 
 
@@ -107,14 +108,54 @@ def capability_version() -> str:
         return "(unknown)"
 
 
+class AnalysisError(Exception):
+    """The ``job-analyst`` call failed against the Anthropic API (bad key,
+    rate limit, billing, outage). Carries a ready user-facing notice; the
+    job page renders it with a 502 and leaves the stored emphasis untouched,
+    exactly like an empty result."""
+
+
+def _analysis_error_notice(exc: anthropic.APIError) -> str:
+    """A short, non-technical line for the job page — no traceback, no key."""
+    if isinstance(exc, anthropic.AuthenticationError):
+        return (
+            "The analysis service rejected the API credentials — nothing was "
+            "changed. An operator needs to check ANTHROPIC_API_KEY."
+        )
+    if isinstance(exc, anthropic.PermissionDeniedError):
+        return (
+            "The analysis service declined the request (billing or access) — "
+            "nothing was changed."
+        )
+    if isinstance(exc, anthropic.RateLimitError):
+        return (
+            "The analysis service is rate-limited right now — nothing was "
+            "changed. Try again in a minute."
+        )
+    if isinstance(exc, anthropic.APIConnectionError):
+        return (
+            "Couldn't reach the analysis service — nothing was changed. Try "
+            "again shortly."
+        )
+    return (
+        "The analysis service returned an error — nothing was changed. Try "
+        "again shortly."
+    )
+
+
 def analyse(posting: str) -> Analysis:
     """Analyse a job posting into a prioritised requirements list.
 
     Calls the ``job-analyst`` capability (one LLM call) and maps its
     ``Output`` onto this app's ``Analysis``. Needs ``ANTHROPIC_API_KEY`` in
-    the environment. Anthropic SDK errors (auth, rate limit) propagate.
+    the environment. Anthropic API errors (auth, rate limit, outage) are
+    re-raised as :class:`AnalysisError` with a user-facing notice.
     """
-    return _to_analysis(job_analyst.run(job_analyst.Input(posting=posting)))
+    try:
+        output = job_analyst.run(job_analyst.Input(posting=posting))
+    except anthropic.APIError as exc:
+        raise AnalysisError(_analysis_error_notice(exc)) from exc
+    return _to_analysis(output)
 
 
 def _to_analysis(output: job_analyst.Output) -> Analysis:

@@ -3,6 +3,20 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-10 — Analyse: show Anthropic API failures instead of a 500
+
+`POST /jobs/{id}/analyse` raised a bare 500 when the `job-analyst`
+capability's Claude call failed — reproduced in the wild with an unset
+`ANTHROPIC_API_KEY` on the Render service. `_job_analysis.analyse` now
+catches `anthropic.APIError` and re-raises `_job_analysis.AnalysisError`
+carrying a short, non-technical notice (a distinct line for auth,
+permission/billing, rate-limit, and connection errors; the raw SDK
+message is never shown). The `analyse` handler in `app.py` renders it the
+same way an empty result is already handled: 502, stored emphasis left
+untouched, reason shown on the job page. New test in `tests/test_jobs.py`.
+Root cause of the incident was environment config, not code — the fix is
+just a better failure surface.
+
 ## 2026-09-10 — Forgot-password: redirect after POST
 
 `POST /auth/forgot` rendered the "check your email" confirmation directly,
