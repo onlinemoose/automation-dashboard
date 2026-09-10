@@ -58,8 +58,4 @@ cv-writer = { git = "https://github.com/onlinemoose/cv-writer.git", rev = "v0.6.
 job-analyst = { git = "https://github.com/onlinemoose/job-analyst.git", rev = "v0.2.0" }
 targeted-editor = { git = "https://github.com/onlinemoose/targeted-editor.git", rev = "v0.1.0" }
 content-creation-team = { git = "https://github.com/onlinemoose/content-creation-team.git", rev = "v0.2.0" }
-# Interim pin by commit, not tag: pushing the v0.1.0 tag to
-# publish-to-website was rejected by GitHub (likely a tag-protection rule
-# on the template repo) — see docs/PROGRESS.md. Move this to
-# `rev = "v0.1.0"` once the tag exists.
-publish-to-website = { git = "https://github.com/onlinemoose/publish-to-website.git", rev = "03265e165784167f2fedda6f4267bfc2bce90fc1" }
+publish-to-website = { git = "https://github.com/onlinemoose/publish-to-website.git", rev = "v0.1.0" }
