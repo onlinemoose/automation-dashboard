@@ -141,10 +141,14 @@ silently.
       `DEFAULT_RECRAFT_STYLE_ID` in
       `dashboard/areas/content_creation_team/_publish.py` is now
       `f5c10ae2-c95d-4ea6-b5db-542762fab62f`. Notes in both repos'
-      `docs/PROGRESS.md`. Open follow-up: a `publish-to-website` `0.1.1`
-      to stop `recraftv3` baking the post title into the hero image.
-- [x] Move the `publish-to-website` pin to `rev = "v0.1.0"` — done
-      2026-09-10 (commit `e9bbf7d`).
+      `docs/PROGRESS.md`.
+- [x] `publish-to-website` v0.1.1 — done 2026-09-10. Stops `recraftv3`
+      baking the post title into the hero (prose subject + explicit
+      "no text" + default `negative_prompt`) and caps the prompt at
+      Recraft's 1000-char limit. Pin moved to `rev = "v0.1.1"`,
+      `uv.lock` → `e0eefc4`.
+- [x] Move the `publish-to-website` pin to a tag — done 2026-09-10:
+      `v0.1.0` (commit `e9bbf7d`), then `v0.1.1` (commit below).
 - [ ] **Repo-side backstop on `onlinemoose/feldklang`** (defence in
       depth, independent of this app): `.github/workflows/additive-guard.yml`
       (fails a push to `master` that deletes/renames a file or touches a

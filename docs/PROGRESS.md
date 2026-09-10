@@ -24,10 +24,15 @@ Two follow-ups from Part B, now that a `RECRAFT_API_TOKEN` exists.
   banner text). The capability itself is unchanged — `recraft_style_id`
   was already an optional `Input` field, so it stays pinned at `v0.1.0`.
   Full A/B notes in `publish-to-website/docs/PROGRESS.md`.
-- **Known gap:** `recraftv3` still bakes the post title into the hero as
-  lettering. The fix is a prompt change in the capability (drop the
-  literal title / add a no-text negative prompt) → a future
-  `publish-to-website` `0.1.1` + re-pin.
+- **Baked-in title text — fixed in `publish-to-website` v0.1.1**, pin
+  moved (`rev = "v0.1.1"`, `uv.lock` → `e0eefc4`). That release stops
+  the prompt handing Recraft a quoted title/headline, adds an explicit
+  "no text" instruction + a default `negative_prompt`, and caps the
+  prompt at Recraft's 1000-char limit. Verified: with the brand style
+  (the path this adapter always takes) the hero comes back with no
+  rendered text. Prompt-only without a style can still letter the title
+  — `recraftv3` is stubborn alone — but this adapter never calls it that
+  way.
 
 ## 2026-09-10 — Content Creation Team: "Publish to website" (Part B)
 

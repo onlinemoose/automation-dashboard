@@ -58,4 +58,4 @@ cv-writer = { git = "https://github.com/onlinemoose/cv-writer.git", rev = "v0.6.
 job-analyst = { git = "https://github.com/onlinemoose/job-analyst.git", rev = "v0.2.0" }
 targeted-editor = { git = "https://github.com/onlinemoose/targeted-editor.git", rev = "v0.1.0" }
 content-creation-team = { git = "https://github.com/onlinemoose/content-creation-team.git", rev = "v0.2.0" }
-publish-to-website = { git = "https://github.com/onlinemoose/publish-to-website.git", rev = "v0.1.0" }
+publish-to-website = { git = "https://github.com/onlinemoose/publish-to-website.git", rev = "v0.1.1" }
