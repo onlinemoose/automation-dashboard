@@ -1,0 +1,7 @@
+{% macro nav_list(area_nav) -%}
+<ul class="uk-nav uk-nav-default">
+  {% for a in area_nav | default([]) %}{% for label, href in a.nav %}
+  <li><a href="{{ href }}">{{ label }}</a></li>
+  {% endfor %}{% endfor %}
+</ul>
+{%- endmacro %}

@@ -240,6 +240,13 @@ services:
         sync: false
 ```
 
+### Front-end assets
+
+UIKit (`uikit.min.css` / `uikit.min.js` / `uikit-icons.min.js`) is
+committed, vendored static files under `dashboard/static/` — nothing is
+built on Render, same as `app.css` today. On a version bump, re-download
+the three files and update the pin in `docs/FRONTEND.md`.
+
 ### Known gotchas
 
 - **Cold start:** the free service spins down after 15 min idle; the

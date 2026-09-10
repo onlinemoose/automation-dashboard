@@ -3,6 +3,45 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-10 — UIKit: a slim topbar + a nav sidebar
+
+Vendored UIKit `3.25.22` (`uikit.min.css` / `uikit.min.js` /
+`uikit-icons.min.js`) into `dashboard/static/`, committed and served like
+`app.css` — no build step, Render unchanged. UIKit CSS loads *before*
+`app.css` so hand-written rules win ties.
+
+Shell chrome: the horizontal `.topbar` nav became a slim topbar (brand +
+signed-in email + Sign out, plus a burger `< @m`) alongside a new left
+**sidebar** (`_sidebar.html` + `_macros.html`) — persistent on `@m`,
+`uk-offcanvas` below it. `area_nav` moved from the topbar into the
+sidebar; `<main>` / `.panel` untouched, so every page body renders
+unchanged. Same chrome mirrored into the four streamed running partials
+(2 shell + 2 Content-Creation-Team, which inline chrome — a shell change).
+`asset_v` tuples in `_render.py` + `app.py` gained the UIKit filenames.
+New `tests/test_shell.py`; new `docs/FRONTEND.md`.
+
+### Deviation from the original plan
+
+The plan assumed the login / forgot-password / set-password pages have an
+*empty* `area_nav`, and guarded the sidebar include on that alone (no
+edits to those 3 templates). That assumption doesn't hold:
+`_access.visible_areas(None)` returns every area for an anonymous visitor
+(`None` means unrestricted, not "none") — those pages already relied on
+overriding `{% block nav %}{% endblock %}` to hide the old topbar links,
+not on an empty `area_nav`. Fixed with the same pattern: a new
+`{% block sidebar %}{% endblock %}` override on all 3 auth templates,
+alongside the `nav` override each already had. One line per template.
+
+### Deferred / Not touched
+
+- No page body or area template was restyled — UIKit adoption is
+  incremental.
+- UIKit component styling / dark mode not yet mapped onto our tokens
+  beyond the sidebar nav.
+- `.topbar__sep` rule in `app.css` is now dead (markup removed); left in
+  place, remove in a later pass.
+- `_content_running_*` edited only because they inline shell chrome.
+
 ## 2026-09-10 — Analyse: show Anthropic API failures instead of a 500
 
 `POST /jobs/{id}/analyse` raised a bare 500 when the `job-analyst`

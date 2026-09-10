@@ -1,0 +1,17 @@
+{# The shell nav sidebar: a persistent rail on desktop (`@m` and up) plus
+   the same list inside a `uk-offcanvas` for mobile, toggled by the
+   burger button in base.html's topbar. Included from `base.html` and the
+   four streamed "working…" partials — anywhere the shell chrome renders.
+   Callers guard the include with `{% if area_nav | default([]) %}` (or,
+   on an auth page, override `{% block sidebar %}` empty — see base.html)
+   so a visitor with no areas to show gets no sidebar and no burger. #}
+{% from "_macros.html" import nav_list %}
+<aside class="shell__nav uk-visible@m">
+  {{ nav_list(area_nav) }}
+</aside>
+<div id="shell-nav" uk-offcanvas="overlay: true; mode: slide">
+  <div class="uk-offcanvas-bar">
+    <button class="uk-offcanvas-close" type="button" uk-close></button>
+    {{ nav_list(area_nav) }}
+  </div>
+</div>

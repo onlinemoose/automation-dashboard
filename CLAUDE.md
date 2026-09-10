@@ -99,9 +99,10 @@ adapters, routes, templates, and docs. **Areas never import each other.**
 `_access.py` (per-user area grants), `_render.py` (+ `make_templates`),
 `_streaming.py` (`stream_run`), `pages/_spec.py` (+ `Area`),
 `pages/__init__.py`, `areas/__init__.py`,
-`templates/{base,login,index,page,result,_result_panel,_running_*}.html`,
-`static/app.css`, `docs/{EXPERIENCE,DEPLOY,DEPLOYMENT_CHECKLIST,USER_SCOPING,ACCESS}.md`,
-`tests/test_{pages,auth,auth_backend,guardrails}.py`.
+`templates/{base,login,index,page,result,_result_panel,_running_*,_sidebar,_macros}.html`,
+`static/{app.css,uikit.min.css,uikit.min.js,uikit-icons.min.js}`,
+`docs/{EXPERIENCE,DEPLOY,DEPLOYMENT_CHECKLIST,USER_SCOPING,ACCESS,FRONTEND}.md`,
+`tests/test_{pages,auth,auth_backend,guardrails,shell}.py`.
 
 **Working rule.** When a task names one area, change only that area's
 files and — if unavoidable — the shell. Do not open or edit another

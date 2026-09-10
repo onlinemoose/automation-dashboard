@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Automation Dashboard{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg?v={{ asset_v }}" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/uikit.min.css?v={{ asset_v }}">
   <link rel="stylesheet" href="/static/app.css?v={{ asset_v }}">
+  <script defer src="/static/uikit.min.js?v={{ asset_v }}"></script>
+  <script defer src="/static/uikit-icons.min.js?v={{ asset_v }}"></script>
 </head>
 <body>
   {% if stub_runs %}
@@ -13,10 +16,11 @@
   {% endif %}
   <header class="topbar">
     <a class="brand" href="/"><img class="brand__mark" src="/static/favicon.svg?v={{ asset_v }}" alt="" width="22" height="22">Automation&nbsp;Dashboard</a>
-    <nav>{% block nav %}{% for a in area_nav | default([]) %}{% for label, href in a.nav %}<a href="{{ href }}">{{ label }}</a> {% endfor %}{% endfor %}<span class="topbar__sep" aria-hidden="true"></span>{% if user_email %}<span class="topbar__user">{{ user_email }}</span> {% endif %}<a href="/logout">Sign out</a>{% endblock %}</nav>
+    <nav>{% block nav %}{% if area_nav | default([]) %}<button class="topbar__burger uk-hidden@m" type="button" uk-toggle="target: #shell-nav" aria-label="Menu" uk-navbar-toggle-icon></button>{% endif %}<span class="topbar__account">{% if user_email %}<span class="topbar__user">{{ user_email }}</span>{% endif %}<a href="/logout">Sign out</a></span>{% endblock %}</nav>
   </header>
-  <main>
-    {% block main %}{% endblock %}
-  </main>
+  <div class="shell">
+    {% block sidebar %}{% if area_nav | default([]) %}{% include "_sidebar.html" %}{% endif %}{% endblock %}
+    <main>{% block main %}{% endblock %}</main>
+  </div>
 </body>
 </html>
