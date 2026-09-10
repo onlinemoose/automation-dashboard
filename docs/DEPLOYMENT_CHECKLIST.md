@@ -51,14 +51,11 @@ nothing else changes.
 - [ ] **`publish-to-website`** (added 2026-09-10): add
       `onlinemoose/publish-to-website` to the `GH_TOKEN` PAT repo list
       and the Claude GitHub App grant, same as every other private
-      capability repo. **Note:** `pyproject.toml` currently pins it by
-      commit SHA, not a `vX.Y.Z` tag — pushing the `v0.1.0` tag was
-      rejected by GitHub (403), most likely a tag-protection rule on the
-      repo (it was created from `capability-module-template`, which may
-      carry one by default). Check **Settings → Tags** (or **Rules →
-      Rulesets**) on `onlinemoose/publish-to-website`, relax/allow the
-      `v*` pattern for the pushing credential, then move the pin in
-      `pyproject.toml` to `rev = "v0.1.0"` and `uv lock`.
+      capability repo. ~~**Note:** pinned by commit SHA — the `v0.1.0`
+      tag push was rejected (403).~~ Resolved 2026-09-10: the `v0.1.0`
+      tag exists, `pyproject.toml` pins `rev = "v0.1.0"`. The 403 was a
+      stale push credential, not a tag-protection rule — nothing to
+      change on GitHub.
 - [x] Secret env vars set by hand: `SESSION_SECRET` (fresh, via Render's
       Generate), `DASHBOARD_PASSWORD_HASH`, `ANTHROPIC_API_KEY`,
       `GH_TOKEN`. `DASHBOARD_HTTPS=1`.
@@ -137,16 +134,17 @@ silently.
       `.github/workflows/**` and disable the additive-guard below), *not*
       Administration, *not* delete. Add it to the same PAT-rotation task
       as `GH_TOKEN` above (both expire ≤1 year).
-- [ ] Recraft brand `style_id` (plan A6, not yet done — no
-      `RECRAFT_API_TOKEN` was available while `publish-to-website` was
-      built): once a token exists, run the one-off `POST /v1/styles`
-      call with the Feldklang design-system reference images, compare a
-      few generations with/without it, and set the winner as
+- [x] Recraft brand `style_id` (plan A6) — done 2026-09-10. Created a
+      private `digital_illustration` style from five Feldklang
+      design-system reference compositions; A/B against prompt-only, the
+      style held the palette and editorial restraint, so
       `DEFAULT_RECRAFT_STYLE_ID` in
-      `dashboard/areas/content_creation_team/_publish.py`.
-- [ ] Move the `publish-to-website` pin in `pyproject.toml` from the
-      interim commit SHA to `rev = "v0.1.0"` once the tag exists (see
-      the `publish-to-website` bullet above) — `uv lock`.
+      `dashboard/areas/content_creation_team/_publish.py` is now
+      `f5c10ae2-c95d-4ea6-b5db-542762fab62f`. Notes in both repos'
+      `docs/PROGRESS.md`. Open follow-up: a `publish-to-website` `0.1.1`
+      to stop `recraftv3` baking the post title into the hero image.
+- [x] Move the `publish-to-website` pin to `rev = "v0.1.0"` — done
+      2026-09-10 (commit `e9bbf7d`).
 - [ ] **Repo-side backstop on `onlinemoose/feldklang`** (defence in
       depth, independent of this app): `.github/workflows/additive-guard.yml`
       (fails a push to `master` that deletes/renames a file or touches a

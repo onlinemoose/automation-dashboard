@@ -3,6 +3,32 @@
 Dated entries, newest first. What's done, what's deferred, decisions
 made. Read this before assuming anything about the app's current state.
 
+## 2026-09-10 — publish-to-website: real pin + brand Recraft style (A6)
+
+Two follow-ups from Part B, now that a `RECRAFT_API_TOKEN` exists.
+
+- **Pin moved to the tag.** `v0.1.0` now exists on
+  `onlinemoose/publish-to-website` (the earlier 403 was a stale push
+  credential, not a protection rule — nothing to change on GitHub).
+  `pyproject.toml` → `publish-to-website = { …, rev = "v0.1.0" }` (was
+  the interim commit-SHA pin; comment removed), `uv.lock` re-resolved to
+  the same commit. Commit `e9bbf7d`.
+- **A6 — brand `style_id` adopted.**
+  `_publish.py`'s `DEFAULT_RECRAFT_STYLE_ID` is now
+  `"f5c10ae2-c95d-4ea6-b5db-542762fab62f"` (was `None`) — a private
+  `digital_illustration` Recraft style built from five Feldklang
+  design-system reference compositions. In an A/B on the sample post
+  (3 with the style vs 3 prompt-only) the style held the palette
+  (~75% of the frame on the paper ground vs ~6% prompt-only, which
+  drifts to saturated coral and renders literal scenes with baked-in
+  banner text). The capability itself is unchanged — `recraft_style_id`
+  was already an optional `Input` field, so it stays pinned at `v0.1.0`.
+  Full A/B notes in `publish-to-website/docs/PROGRESS.md`.
+- **Known gap:** `recraftv3` still bakes the post title into the hero as
+  lettering. The fix is a prompt change in the capability (drop the
+  literal title / add a no-text negative prompt) → a future
+  `publish-to-website` `0.1.1` + re-pin.
+
 ## 2026-09-10 — Content Creation Team: "Publish to website" (Part B)
 
 Wires the new `publish-to-website` capability into the Content Creation

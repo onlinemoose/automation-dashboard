@@ -21,10 +21,12 @@ import publish_to_website
 
 CAPABILITY = "publish-to-website"
 
-# The Feldklang brand Recraft style_id (plan A6) — not yet created; no
-# RECRAFT_API_TOKEN was available while the capability was built. Leave
-# None until one exists; see publish-to-website/docs/PROGRESS.md.
-DEFAULT_RECRAFT_STYLE_ID: str | None = None
+# The Feldklang brand Recraft style_id (plan A6). Created 2026-09-10 from
+# five design-system reference compositions (warm paper / ink / terracotta,
+# paper grain, generous negative space); in an A/B against prompt-only it
+# held the palette (~75% paper ground vs ~6%) and the editorial restraint,
+# so it's the default. See publish-to-website/docs/PROGRESS.md.
+DEFAULT_RECRAFT_STYLE_ID: str | None = "f5c10ae2-c95d-4ea6-b5db-542762fab62f"
 
 
 def capability_version() -> str:
