@@ -51,6 +51,44 @@ the request and the result.
      don't repeat. The new piece replaces the old one; history grows.
    - **Run again from scratch** re-runs with no resume inputs.
 
+## Publish to website
+
+Once a piece has a `final_copy`, **Publish to website**
+(`GET`/`POST /content/{id}/publish`) sends it to the live Feldklang site:
+
+1. A small form, pre-filled from the piece — title / excerpt / slug /
+   tags editable, plus an optional hero-image prompt override. **No
+   "overwrite" control exists anywhere in this flow.**
+2. On submit: `_publish.build_input` layers the form's overrides onto
+   the stored piece and calls `publish_to_website.run()` (Recraft
+   generation + web optimisation + `.mdx` assembly, ~5-15s — plain
+   `run_in_threadpool`, no streaming). A capability failure (e.g. no
+   `RECRAFT_API_TOKEN`) aborts here with nothing committed.
+3. `_feldklang_repo.commit_post` then pushes both returned files —
+   `.mdx` + hero JPEG — to `onlinemoose/feldklang`'s `master` branch in
+   one atomic, additive-only commit via the Git Data API. A pre-existing
+   `<slug>.mdx` or `<slug>-hero.jpg` refuses (409) — publish a
+   correction under a new slug. See `_feldklang_repo.py`'s module
+   docstring for the full additive-safety sequence and its guarantees.
+4. On success, `piece["published"] = {at, commit_sha, post_url}` is
+   saved onto the brief (`_briefs.update_brief`), and the panel shows
+   the live URL plus a preview of the generated hero image and `.mdx`.
+5. **Idempotency.** Once `piece["published"]` is set, resubmitting
+   refuses (409) unless the form carries `confirm_republish` (the
+   detail page's "Publish again" link sets it) — and even then,
+   `commit_post`'s own collision check refuses unless the slug changed,
+   so a re-publish only ever succeeds when the earlier attempt failed
+   before the commit landed, or a new slug is used.
+6. **Stub mode** (`DASHBOARD_STUB_RUNS=1`) skips **both** the capability
+   and the GitHub commit — a canned panel renders, nothing is called.
+
+**Configuration** (this area's own, at the app edge — CLAUDE.md rule 7):
+`RECRAFT_API_TOKEN` (read by the capability) and `FELDKLANG_GH_TOKEN` (a
+fine-grained PAT scoped to `Contents: Read and write` on
+`onlinemoose/feldklang` only — *not* Workflows, *not* Administration; see
+`docs/DEPLOYMENT_CHECKLIST.md`). Either missing surfaces as a visible
+error in the panel, never a silent no-op.
+
 ## The capability seam — `content-creation-team`
 
 `dashboard/areas/content_creation_team/_content_team.py` is the only file
@@ -117,6 +155,8 @@ send-back resumes from — `final_copy`, `research_notes`, `seo_brief`,
 `title` / `excerpt` / `slug` / `tags`, `approved`, `stopped_on`, and a
 `revision_history` **summary** (per-round verdicts + notes; the large
 per-round `draft` text is dropped — the current `final_copy` supersedes it).
+Once published, `piece["published"]` is `{at, commit_sha, post_url}` —
+absent until the first successful `commit_post`.
 
 Rows are scoped per user: every store call takes the owning `user_id` and
 every query filters on it, reads and writes alike (`docs/USER_SCOPING.md`).

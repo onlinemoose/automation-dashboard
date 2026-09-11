@@ -3,7 +3,18 @@
 {% block main %}
 <section class="panel">
   <p class="crumb"><a href="/content/{{ brief.id }}">&larr; {{ brief.title }}</a></p>
-  <h1>{{ brief.title }} — the piece</h1>
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+    <h1 style="margin: 0;">{{ brief.title }} — the piece</h1>
+    {% if piece.final_copy %}
+      {% if piece.published %}
+      <a class="button button--ghost" href="{{ piece.published.post_url }}"
+         target="_blank" rel="noopener">Published &rarr;</a>
+      <a class="button" href="/content/{{ brief.id }}/publish">Publish again</a>
+      {% else %}
+      <a class="button" href="/content/{{ brief.id }}/publish">Publish</a>
+      {% endif %}
+    {% endif %}
+  </div>
 </section>
 
 {% include "_content_result_panel.html" %}
