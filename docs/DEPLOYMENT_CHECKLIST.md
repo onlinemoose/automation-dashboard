@@ -124,16 +124,16 @@ these set before a real publish will work — until then the panel shows a
 "publishing not configured" / Recraft-auth error rather than failing
 silently.
 
-- [ ] Render env var (secret): `RECRAFT_API_TOKEN` — from
-      <https://www.recraft.ai/>.
-- [ ] Render env var (secret): `FELDKLANG_GH_TOKEN` — a **dedicated**
+- [x] Render env var (secret): `RECRAFT_API_TOKEN` — from
+      <https://www.recraft.ai/>. Set 2026-09-11.
+- [x] Render env var (secret): `FELDKLANG_GH_TOKEN` — a **dedicated**
       fine-grained GitHub PAT, distinct from `GH_TOKEN`:
       **repository access limited to `onlinemoose/feldklang` only**;
       permission **Contents: Read and write** and nothing else —
       explicitly *not* Workflows (so it can't edit
       `.github/workflows/**` and disable the additive-guard below), *not*
       Administration, *not* delete. Add it to the same PAT-rotation task
-      as `GH_TOKEN` above (both expire ≤1 year).
+      as `GH_TOKEN` above (both expire ≤1 year). Set 2026-09-11.
 - [x] Recraft brand `style_id` (plan A6) — done 2026-09-10. Created a
       private `digital_illustration` style from five Feldklang
       design-system reference compositions; A/B against prompt-only, the
