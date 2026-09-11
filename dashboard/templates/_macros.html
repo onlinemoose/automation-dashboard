@@ -1,7 +1,22 @@
 {% macro nav_list(area_nav) -%}
+{% set capabilities = [] %}
+{% set file_management = [] %}
+{% for a in area_nav | default([]) %}{% for label, href in a.nav %}
+  {% if href == "/documents" %}{% set _ = file_management.append((label, href)) %}
+  {% else %}{% set _ = capabilities.append((label, href)) %}{% endif %}
+{% endfor %}{% endfor %}
 <ul class="uk-nav uk-nav-default">
-  {% for a in area_nav | default([]) %}{% for label, href in a.nav %}
+  {% if capabilities %}
+  <li class="uk-nav-header">Capabilities</li>
+  {% for label, href in capabilities %}
   <li><a href="{{ href }}">{{ label }}</a></li>
-  {% endfor %}{% endfor %}
+  {% endfor %}
+  {% endif %}
+  {% if file_management %}
+  <li class="uk-nav-header">File Management</li>
+  {% for label, href in file_management %}
+  <li><a href="{{ href }}">{{ label }}</a></li>
+  {% endfor %}
+  {% endif %}
 </ul>
 {%- endmacro %}

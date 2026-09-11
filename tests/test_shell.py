@@ -55,7 +55,7 @@ def test_an_existing_page_body_is_unchanged(client: TestClient) -> None:
     # Regression signal: /jobs still carries its pinned body classes —
     # this change touches only the shell chrome around it.
     body = client.get("/jobs").text
-    assert "pagelist" in body or "crumb" in body
+    assert "pagelist" in body or "toolbar" in body
 
 
 def test_streamed_slow_page_carries_the_chrome_and_closes_cleanly(monkeypatch) -> None:

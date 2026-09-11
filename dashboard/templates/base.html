@@ -16,7 +16,7 @@
   {% endif %}
   <header class="topbar">
     <a class="brand" href="/"><img class="brand__mark" src="/static/favicon.svg?v={{ asset_v }}" alt="" width="22" height="22">Automation&nbsp;Dashboard</a>
-    <nav>{% block nav %}{% if area_nav | default([]) %}<button class="topbar__burger uk-hidden@m" type="button" uk-toggle="target: #shell-nav" aria-label="Menu" uk-navbar-toggle-icon></button>{% endif %}<span class="topbar__account">{% if user_email %}<span class="topbar__user">{{ user_email }}</span>{% endif %}<a href="/logout">Sign out</a></span>{% endblock %}</nav>
+    <nav>{% block nav %}<span class="topbar__account">{% if user_email %}<span class="topbar__user">{{ user_email }}</span>{% endif %}<a href="/logout">Sign out</a></span>{% if area_nav | default([]) %}<button class="topbar__burger uk-hidden@m" type="button" uk-toggle="target: #shell-nav" aria-label="Menu" uk-navbar-toggle-icon></button>{% endif %}{% endblock %}</nav>
   </header>
   <div class="shell">
     {% block sidebar %}{% if area_nav | default([]) %}{% include "_sidebar.html" %}{% endif %}{% endblock %}

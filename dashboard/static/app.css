@@ -308,7 +308,7 @@ button:hover, .button:hover { filter: brightness(1.05); }
 .shell__nav {
   flex: 0 0 13rem; align-self: stretch;
   border-right: 1px solid var(--line);
-  padding: 1.5rem 1rem;
+  padding: 1.5rem 1.25rem;
 }
 .topbar__account { display: inline-flex; align-items: center; gap: 1rem; }
 /* .topbar__user's own margin-left plus the .topbar__user + a rule (still
@@ -316,16 +316,24 @@ button:hover, .button:hover { filter: brightness(1.05); }
    the gap above; zero the latter here rather than edit that rule. */
 .topbar nav .topbar__user + a { margin-left: 0; }
 .topbar__burger { background: none; border: 0; color: var(--ink-soft); cursor: pointer; }
-.topbar__burger + .topbar__account { margin-left: 1rem; }
+.topbar__account + .topbar__burger { margin-left: 1rem; }
 /* Map UIKit's nav palette onto our tokens, light + dark. */
 .shell__nav .uk-nav-default > li > a,
 .uk-offcanvas-bar .uk-nav-default > li > a { color: var(--ink-soft); }
 .shell__nav .uk-nav-default > li > a:hover,
 .uk-offcanvas-bar .uk-nav-default > li > a:hover { color: var(--ink); }
+/* UIKit's `.uk-offcanvas-bar .uk-nav-default .uk-nav-header` rule assumes
+   a dark offcanvas background and sets white text; ours is light
+   (.uk-offcanvas-bar below), so it needs an override at the same
+   specificity (three classes) or the group headings are invisible. */
+.shell__nav .uk-nav-header,
+.uk-offcanvas-bar .uk-nav-default .uk-nav-header { color: var(--ink-soft); }
 .uk-offcanvas-bar { background: var(--panel); }
 @media (prefers-color-scheme: dark) {
   .shell__nav .uk-nav-default > li > a,
   .uk-offcanvas-bar .uk-nav-default > li > a { color: var(--ink-soft); }
   .shell__nav .uk-nav-default > li > a:hover,
   .uk-offcanvas-bar .uk-nav-default > li > a:hover { color: var(--ink); }
+  .shell__nav .uk-nav-header,
+  .uk-offcanvas-bar .uk-nav-default .uk-nav-header { color: var(--ink-soft); }
 }
