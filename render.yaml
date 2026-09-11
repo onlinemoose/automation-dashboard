@@ -6,8 +6,9 @@
 # connected as a Blueprint. Keep it in step with the dashboard settings.
 #
 # Secrets (SESSION_SECRET, DASHBOARD_PASSWORD_HASH, ANTHROPIC_API_KEY,
-# GH_TOKEN) are set in the dashboard, never here — `sync: false` declares
-# them without a value. See docs/DEPLOYMENT_CHECKLIST.md.
+# GH_TOKEN, RECRAFT_API_TOKEN, FELDKLANG_GH_TOKEN) are set in the
+# dashboard, never here — `sync: false` declares them without a value.
+# See docs/DEPLOYMENT_CHECKLIST.md.
 
 services:
   - type: web
@@ -34,5 +35,9 @@ services:
       - key: SUPABASE_URL             # Background documents store — see docs/BACKGROUND_DOCUMENTS.md
         sync: false
       - key: SUPABASE_SERVICE_KEY     # service_role key; full access, server-side only
+        sync: false
+      - key: RECRAFT_API_TOKEN         # publish-to-website's hero-image generation
+        sync: false
+      - key: FELDKLANG_GH_TOKEN        # Publish to website's GitHub commit — see DEPLOYMENT_CHECKLIST.md for the exact scope
         sync: false
     # Python version comes from .python-version (3.12).
