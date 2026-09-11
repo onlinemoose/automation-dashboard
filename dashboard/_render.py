@@ -27,7 +27,10 @@ def asset_version() -> str:
     """Short hash of the static assets, appended as `?v=` to their URLs so
     a browser fetches the new file after a deploy instead of a stale cache."""
     h = hashlib.sha1()
-    for name in ("app.css", "draft-edit.js", "content-draft-edit.js"):
+    for name in (
+        "app.css", "uikit.min.css", "uikit.min.js", "uikit-icons.min.js",
+        "draft-edit.js", "content-draft-edit.js",
+    ):
         try:
             h.update((_STATIC / name).read_bytes())
         except OSError:
